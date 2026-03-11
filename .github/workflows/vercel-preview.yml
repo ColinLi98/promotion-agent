@@ -1,0 +1,127 @@
+name: Vercel Preview
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: vercel-preview-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-preview:
+    runs-on: ubuntu-latest
+    env:
+      PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+    steps:
+      - name: Evaluate deployment gate
+        id: gate
+        run: |
+          if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_ORG_ID" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping preview deploy: missing one or more Vercel secrets." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ "$PR_HEAD_REPO" != "$GITHUB_REPOSITORY" ]; then
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping preview deploy: pull requests from forks do not receive Vercel secrets." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "deploy=true" >> "$GITHUB_OUTPUT"
+
+      - name: Check out repository
+        if: steps.gate.outputs.deploy == 'true'
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        if: steps.gate.outputs.deploy == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Enable Corepack
+        if: steps.gate.outputs.deploy == 'true'
+        run: corepack enable
+
+      - name: Install dependencies
+        if: steps.gate.outputs.deploy == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        if: steps.gate.outputs.deploy == 'true'
+        run: pnpm typecheck
+
+      - name: Run tests
+        if: steps.gate.outputs.deploy == 'true'
+        run: pnpm test
+
+      - name: Install Vercel CLI
+        if: steps.gate.outputs.deploy == 'true'
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel project settings
+        if: steps.gate.outputs.deploy == 'true'
+        run: vercel pull --yes --environment=preview --token="$VERCEL_TOKEN"
+
+      - name: Build Vercel artifacts
+        if: steps.gate.outputs.deploy == 'true'
+        run: vercel build --token="$VERCEL_TOKEN"
+
+      - name: Deploy preview
+        if: steps.gate.outputs.deploy == 'true'
+        id: deploy
+        run: |
+          url=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN" | tr -d '\r' | tail -n 1)
+          echo "preview_url=$url" >> "$GITHUB_OUTPUT"
+          echo "Preview deployment: $url" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment preview URL
+        if: steps.gate.outputs.deploy == 'true' && github.event_name == 'pull_request'
+        uses: actions/github-script@v8
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.preview_url }}
+        with:
+          script: |
+            const marker = '<!-- vercel-preview -->';
+            const body = `${marker}
+            Vercel preview is ready: ${process.env.PREVIEW_URL}`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+            });
+            const existing = comments.find((comment) =>
+              comment.user?.type === 'Bot' && comment.body?.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              });
+            }

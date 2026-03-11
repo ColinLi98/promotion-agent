@@ -1,6 +1,7 @@
 node_modules/
 tmp/
 .codex/
+.vercel/
 
 .DS_Store
 .env

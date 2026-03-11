@@ -1,5 +1,7 @@
 # Promotion Agent
 
+[![CI](https://github.com/ColinLi98/promotion-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/ColinLi98/promotion-agent/actions/workflows/ci.yml)
+
 Backend-first MVP scaffold for the PRD in [Promotion_Agent_PRD_v0.9.docx](./Promotion_Agent_PRD_v0.9.docx).
 
 ## What is implemented
@@ -57,6 +59,60 @@ Hot-state keys are namespaced and versioned:
 {HOT_STATE_NAMESPACE}:{HOT_STATE_VERSION}:idempotency:...
 {HOT_STATE_NAMESPACE}:{HOT_STATE_VERSION}:lock:...
 ```
+
+## GitHub Guardrails
+
+Recommended branch protection settings for `main`:
+
+- Require a pull request before merging.
+- Require at least 1 approving review.
+- Dismiss stale approvals when new commits are pushed.
+- Require conversation resolution before merging.
+- Require status check `test`.
+- After Vercel secrets are configured, optionally also require `deploy-preview`.
+- Block force pushes and branch deletion.
+- Consider merge queue once more than one contributor is landing changes regularly.
+
+These are recommendations only. They are not auto-enforced by this repo.
+
+## Vercel
+
+This repo includes GitHub Actions workflows for:
+
+- preview deployments on pull requests from this repository
+- production deployments on pushes to `main`
+
+Required GitHub repository secrets:
+
+- `VERCEL_TOKEN`
+- `VERCEL_ORG_ID`
+- `VERCEL_PROJECT_ID`
+
+Suggested one-time setup:
+
+1. Link the repo to a Vercel project locally:
+
+```bash
+pnpm dlx vercel@latest link
+```
+
+2. Read the generated project metadata:
+
+```bash
+cat .vercel/project.json
+```
+
+3. Add the values to GitHub Actions secrets for this repository.
+
+4. Add runtime environment variables in the Vercel project if you want managed PostgreSQL, Redis, or an external billing adapter.
+
+Deployment notes:
+
+- Vercel deploys the Fastify app entrypoint from `src/index.ts`.
+- `public/` assets are bundled into the Vercel function.
+- The settlement worker is not deployed by Vercel and should run separately.
+- Embedded PostgreSQL and embedded Redis scripts are local-dev tooling only.
+- Without `DATABASE_URL` and `REDIS_URL`, Vercel previews run with in-memory state that resets across invocations.
 
 ## PostgreSQL
 
