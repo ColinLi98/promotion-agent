@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: promotion-agent-postgres
+    environment:
+      POSTGRES_DB: promotion_agent
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - promotion_agent_pgdata:/var/lib/postgresql/data
+
+volumes:
+  promotion_agent_pgdata:

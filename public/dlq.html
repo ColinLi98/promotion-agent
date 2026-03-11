@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Promotion Agent DLQ Console</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Settlement DLQ</p>
+          <h1>失败结算的重放与人工处置台</h1>
+          <p class="hero-text">
+            这里用于查看失败结算、重放 dead letter、以及手动标记 resolved / ignored。
+          </p>
+          <div class="hero-actions">
+            <a class="button button-secondary" href="/">返回主控台</a>
+          </div>
+        </div>
+      </header>
+
+      <main class="content-grid">
+        <section class="panel panel-wide">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker">Filters</p>
+              <h2>DLQ 检索</h2>
+            </div>
+            <p class="section-note">按状态或 trace 过滤 dead letter，并支持分页。</p>
+          </div>
+          <form id="dlqFilterForm" class="form-grid">
+            <label>
+              <span>Status</span>
+              <select id="dlqStatusSelect" name="status">
+                <option value="">All</option>
+                <option value="open">open</option>
+                <option value="replayed">replayed</option>
+                <option value="resolved">resolved</option>
+                <option value="ignored">ignored</option>
+              </select>
+            </label>
+            <label>
+              <span>Trace ID</span>
+              <input id="dlqTraceIdInput" name="traceId" placeholder="例如 int_xxx" />
+            </label>
+            <label>
+              <span>Page Size</span>
+              <select id="dlqPageSizeSelect" name="pageSize">
+                <option value="10">10</option>
+                <option value="20" selected>20</option>
+                <option value="50">50</option>
+              </select>
+            </label>
+            <div class="form-actions">
+              <button type="submit" class="button button-primary">查询</button>
+              <span id="dlqMeta" class="inline-feedback"></span>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel panel-wide">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker">Entries</p>
+              <h2>DLQ 列表</h2>
+            </div>
+            <div class="hero-actions">
+              <button id="dlqPrevPage" class="button button-subtle">上一页</button>
+              <button id="dlqNextPage" class="button button-subtle">下一页</button>
+            </div>
+          </div>
+          <div id="dlqList" class="stack"></div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/dlq.js"></script>
+  </body>
+</html>

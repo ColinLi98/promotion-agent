@@ -1,0 +1,35 @@
+{
+  "name": "promotion-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "db:init": "tsx scripts/db-init.ts",
+    "db:embedded": "tsx scripts/start-embedded-postgres.ts",
+    "redis:embedded": "tsx scripts/start-embedded-redis.ts",
+    "billing:mock": "tsx scripts/start-billing-adapter-mock.ts",
+    "alerts:mock": "tsx scripts/start-alert-mock.ts",
+    "worker:settlement": "tsx scripts/start-settlement-worker.ts",
+    "test": "vitest run"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "fastify": "^5.8.2",
+    "pg": "^8.20.0",
+    "redis": "^5.11.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.4.0",
+    "@types/pg": "^8.18.0",
+    "embedded-postgres": "18.3.0-beta.16",
+    "redis-memory-server": "^0.16.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}

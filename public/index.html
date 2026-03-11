@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Promotion Agent Control Room</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Promotion Agent</p>
+          <h1>可披露的 Agent Sponsored Recommendation Control Room</h1>
+          <p class="hero-text">
+            当前这版已经不是空 PRD。后端闭环已经打通：活动创建、Offer 编译、Policy 预检、激活、机会评估、回执和结算都能跑。
+          </p>
+          <div class="hero-actions">
+            <button id="refreshAll" class="button button-primary">刷新状态</button>
+            <a class="button button-secondary" href="#opportunityLab">评估机会</a>
+          </div>
+        </div>
+        <div class="hero-panel">
+          <div class="signal-card">
+            <p class="signal-label">System Status</p>
+            <div class="signal-value">
+              <span id="healthDot" class="health-dot"></span>
+              <span id="healthText">Checking</span>
+            </div>
+            <p class="signal-meta">排序服务、Policy 预检、结算链路由同一 MVP 服务提供。</p>
+          </div>
+          <div class="signal-grid" id="summaryCards"></div>
+        </div>
+      </header>
+
+      <main class="content-grid">
+        <section class="panel panel-wide">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker">Current State</p>
+              <h2>当前系统状态</h2>
+            </div>
+            <p class="section-note">对应 PRD 的 Discovery, Campaign Prep, Opportunity Exchange, Measurement 四段闭环。</p>
+          </div>
+          <div id="statusStrip" class="status-strip"></div>
+        </section>
+
+        <section class="panel">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker">Campaign Board</p>
+              <h2>活动看板</h2>
+            </div>
+            <p class="section-note">展示生命周期、policy 决策、结算模型和投放状态。</p>
+          </div>
+          <div id="campaignList" class="stack"></div>
+        </section>
+
+        <section class="panel">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker">Partner Surface</p>
+              <h2>合作 Agent</h2>
+            </div>
+            <p class="section-note">当前 seed data 已有两个可投放 partner。</p>
+          </div>
+          <div id="partnerList" class="stack"></div>
+        </section>
+
+        <section class="panel">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker">Create Campaign</p>
+              <h2>创建演示活动</h2>
+            </div>
+            <p class="section-note">提交后会自动触发 Offer 编译和 Policy 预检。</p>
+          </div>
+          <form id="campaignForm" class="form-grid">
+            <label>
+              <span>Advertiser</span>
+              <input name="advertiser" value="Northstar CRM" required />
+            </label>
+            <label>
+              <span>Product Name</span>
+              <input name="productName" value="Northstar CRM" required />
+            </label>
+            <label>
+              <span>Category</span>
+              <input name="category" value="crm_software" required />
+            </label>
+            <label>
+              <span>Region</span>
+              <input name="region" value="UK" required />
+            </label>
+            <label>
+              <span>Billing Model</span>
+              <select name="billingModel">
+                <option value="CPQR">CPQR</option>
+                <option value="CPA">CPA</option>
+              </select>
+            </label>
+            <label>
+              <span>Payout</span>
+              <input name="payoutAmount" type="number" value="160" min="1" required />
+            </label>
+            <label>
+              <span>Budget</span>
+              <input name="budget" type="number" value="12000" min="1" required />
+            </label>
+            <label>
+              <span>Price</span>
+              <input name="price" type="number" value="699" min="1" required />
+            </label>
+            <label class="span-2">
+              <span>Description</span>
+              <textarea name="description" rows="3">Revenue-focused CRM for mid-market teams that need pipeline clarity and disciplined handoff workflows.</textarea>
+            </label>
+            <label class="span-2">
+              <span>Claim</span>
+              <input name="claim" value="SOC 2 Type II" required />
+            </label>
+            <label class="span-2">
+              <span>Disclosure</span>
+              <input name="disclosureText" value="Sponsored recommendation from Northstar CRM." required />
+            </label>
+            <label class="span-2">
+              <span>Action Endpoint</span>
+              <input name="actionEndpoint" value="https://api.northstar.example.com/demo" required />
+            </label>
+            <label class="span-2">
+              <span>Proof URL</span>
+              <input name="proofUrl" value="https://northstar.example.com/security" required />
+            </label>
+            <div class="form-actions span-2">
+              <button type="submit" class="button button-primary">创建 Draft Campaign</button>
+              <span id="campaignFormResult" class="inline-feedback"></span>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel" id="opportunityLab">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker">Opportunity Lab</p>
+              <h2>Shortlist 模拟器</h2>
+            </div>
+            <p class="section-note">这部分直连 `POST /opportunities/evaluate`。</p>
+          </div>
+          <form id="opportunityForm" class="form-grid">
+            <label>
+              <span>Intent ID</span>
+              <input name="intentId" value="int_demo_ui" required />
+            </label>
+            <label>
+              <span>Category</span>
+              <input name="category" value="crm_software" required />
+            </label>
+            <label>
+              <span>Task Type</span>
+              <input name="taskType" value="compare_and_shortlist" required />
+            </label>
+            <label>
+              <span>Geo</span>
+              <input name="geo" value="UK" required />
+            </label>
+            <label>
+              <span>Sponsored Slots</span>
+              <input name="sponsoredSlots" type="number" value="3" min="1" max="10" required />
+            </label>
+            <label>
+              <span>Disclosure Required</span>
+              <select name="disclosureRequired">
+                <option value="true">true</option>
+                <option value="false">false</option>
+              </select>
+            </label>
+            <div class="form-actions span-2">
+              <button type="submit" class="button button-primary">运行评估</button>
+              <span id="opportunityResult" class="inline-feedback"></span>
+            </div>
+          </form>
+          <div id="shortlistResult" class="stack"></div>
+        </section>
+
+        <section class="panel">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker">Settlement View</p>
+              <h2>结算状态</h2>
+            </div>
+            <p class="section-note">回执只负责入队。真正结算由 retry queue 驱动状态机推进。</p>
+          </div>
+          <div class="form-actions">
+            <button id="processRetryQueue" class="button button-primary">处理 Retry Queue</button>
+            <span id="retryQueueResult" class="inline-feedback"></span>
+          </div>
+          <div id="settlementList" class="stack"></div>
+        </section>
+
+        <section class="panel">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker">Retry Queue</p>
+              <h2>重试队列</h2>
+            </div>
+            <p class="section-note">这里展示待处理、重试中或已完成的 settlement retry job。</p>
+          </div>
+          <div class="form-actions">
+            <a class="button button-secondary" href="/dlq.html">打开 DLQ 页面</a>
+          </div>
+          <div id="retryJobList" class="stack"></div>
+        </section>
+
+        <section class="panel">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker">Audit Trail</p>
+              <h2>操作轨迹</h2>
+            </div>
+            <p class="section-note">展示最近的 cache、idempotency、campaign、receipt、settlement 事件。</p>
+          </div>
+          <div class="form-actions">
+            <a class="button button-secondary" href="/audit.html">打开 Drill-Down 页面</a>
+          </div>
+          <div id="auditTrailList" class="stack"></div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

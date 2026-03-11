@@ -1,0 +1,11 @@
+node_modules/
+tmp/
+.codex/
+
+.DS_Store
+.env
+.env.local
+
+dist/
+coverage/
+*.log

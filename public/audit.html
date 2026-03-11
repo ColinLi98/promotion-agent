@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Promotion Agent Audit Drill-Down</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Audit Drill-Down</p>
+          <h1>按 Trace 检索 Promotion Agent Audit Trail</h1>
+          <p class="hero-text">
+            这里用于按 trace、entity、分页查看完整事件链，适合排查回执幂等、retry queue 和 settlement 状态机。
+          </p>
+          <div class="hero-actions">
+            <a class="button button-secondary" href="/">返回主控台</a>
+          </div>
+        </div>
+      </header>
+
+      <main class="content-grid">
+        <section class="panel panel-wide">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker">Filters</p>
+              <h2>审计检索</h2>
+            </div>
+            <p class="section-note">支持按 trace drill-down，并带分页与 entity 过滤。</p>
+          </div>
+          <form id="auditFilterForm" class="form-grid">
+            <label>
+              <span>Trace ID</span>
+              <input id="traceIdInput" name="traceId" placeholder="例如 int_redis_verify_02 或 cmp_xxx" />
+            </label>
+            <label>
+              <span>Entity Type</span>
+              <select id="entityTypeSelect" name="entityType">
+                <option value="">All</option>
+                <option value="campaign">campaign</option>
+                <option value="policy_check">policy_check</option>
+                <option value="opportunity">opportunity</option>
+                <option value="receipt">receipt</option>
+                <option value="settlement">settlement</option>
+                <option value="idempotency">idempotency</option>
+                <option value="cache">cache</option>
+              </select>
+            </label>
+            <label>
+              <span>Page Size</span>
+              <select id="pageSizeSelect" name="pageSize">
+                <option value="10">10</option>
+                <option value="20" selected>20</option>
+                <option value="50">50</option>
+              </select>
+            </label>
+            <div class="form-actions">
+              <button type="submit" class="button button-primary">查询</button>
+              <span id="auditMeta" class="inline-feedback"></span>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel panel-wide">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker">Results</p>
+              <h2>事件列表</h2>
+            </div>
+            <div class="hero-actions">
+              <button id="prevPage" class="button button-subtle">上一页</button>
+              <button id="nextPage" class="button button-subtle">下一页</button>
+            </div>
+          </div>
+          <div id="auditResults" class="stack"></div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/audit.js"></script>
+  </body>
+</html>
