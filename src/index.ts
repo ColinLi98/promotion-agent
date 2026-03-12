@@ -5,8 +5,8 @@ const port = Number(process.env.PORT ?? 3000);
 const host = process.env.HOST ?? "0.0.0.0";
 
 const main = async () => {
-  const { store, persistence, hotStatePersistence, settlementGatewayMode } = await createConfiguredStore();
-  const app = buildServer(store);
+  const { store, persistence, hotStatePersistence, settlementGatewayMode, appMode } = await createConfiguredStore();
+  const app = buildServer(store, { appMode });
 
   const shutdown = async () => {
     await app.close();
@@ -26,7 +26,7 @@ const main = async () => {
     host,
   });
 
-  console.log(`promotion-agent listening on http://${host}:${port} using ${persistence} persistence, ${hotStatePersistence} hot-state, ${settlementGatewayMode} billing adapter`);
+  console.log(`promotion-agent listening on http://${host}:${port} using ${persistence} persistence, ${hotStatePersistence} hot-state, ${settlementGatewayMode} billing adapter, mode=${appMode}`);
 };
 
 main().catch((error) => {

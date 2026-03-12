@@ -1,3 +1,5 @@
+import { bootstrapDemoScenario } from "./demo-scenario.js";
+import { buildDemoSeedData } from "./demo-seed.js";
 import { InMemoryHotStateStore } from "./hot-state.js";
 import { HttpSettlementGateway } from "./http-settlement-gateway.js";
 import { PostgresPromotionAgentRepository } from "./postgres-repository.js";
@@ -7,6 +9,7 @@ import { SimulatedSettlementGateway } from "./settlement-gateway.js";
 import { createStore, PromotionAgentStore } from "./store.js";
 
 export const createConfiguredStore = async () => {
+  const appMode: "default" | "demo" = process.env.APP_MODE === "demo" ? "demo" : "default";
   const connectionString = process.env.DATABASE_URL;
   const redisUrl = process.env.REDIS_URL;
   const billingAdapterUrl = process.env.BILLING_ADAPTER_URL;
@@ -18,6 +21,7 @@ export const createConfiguredStore = async () => {
   const billingAdapterTimestampHeader = process.env.BILLING_ADAPTER_TIMESTAMP_HEADER;
   const hotStateNamespace = process.env.HOT_STATE_NAMESPACE ?? "promotion-agent";
   const hotStateVersion = process.env.HOT_STATE_VERSION ?? "v1";
+  const seedData = appMode === "demo" ? buildDemoSeedData() : buildSeedData();
   const settlementGateway = billingAdapterUrl
     ? new HttpSettlementGateway({
         url: billingAdapterUrl,
@@ -31,10 +35,30 @@ export const createConfiguredStore = async () => {
     : new SimulatedSettlementGateway();
   const settlementGatewayMode = billingAdapterUrl ? ("http" as const) : ("simulated" as const);
 
+  if (appMode === "demo") {
+    const hotState = new InMemoryHotStateStore(hotStateNamespace, hotStateVersion);
+    const store = createStore({
+      seedData,
+      hotState,
+      settlementGateway: new SimulatedSettlementGateway(),
+    });
+    await bootstrapDemoScenario(store);
+
+    return {
+      store,
+      hotState,
+      persistence: "memory" as const,
+      hotStatePersistence: "memory" as const,
+      settlementGatewayMode: "simulated" as const,
+      appMode,
+    };
+  }
+
   if (!connectionString) {
     const hotState = new InMemoryHotStateStore(hotStateNamespace, hotStateVersion);
     return {
       store: createStore({
+        seedData,
         hotState,
         settlementGateway,
       }),
@@ -42,18 +66,20 @@ export const createConfiguredStore = async () => {
       persistence: "memory" as const,
       hotStatePersistence: "memory" as const,
       settlementGatewayMode,
+      appMode,
     };
   }
 
   const hotState = redisUrl
     ? await RedisHotStateStore.connect(redisUrl, hotStateNamespace, hotStateVersion)
     : new InMemoryHotStateStore(hotStateNamespace, hotStateVersion);
-  const repository = await PostgresPromotionAgentRepository.connect(connectionString, buildSeedData());
+  const repository = await PostgresPromotionAgentRepository.connect(connectionString, seedData);
   return {
     store: new PromotionAgentStore(repository, hotState, settlementGateway),
     hotState,
     persistence: "postgres" as const,
     hotStatePersistence: redisUrl ? ("redis" as const) : ("memory" as const),
     settlementGatewayMode,
+    appMode,
   };
 };

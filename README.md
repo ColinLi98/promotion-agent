@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/ColinLi98/promotion-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/ColinLi98/promotion-agent/actions/workflows/ci.yml)
 
+Demo: [https://promotion-agent-demo.vercel.app](https://promotion-agent-demo.vercel.app)
+
 Backend-first MVP scaffold for the PRD in [Promotion_Agent_PRD_v0.9.docx](./Promotion_Agent_PRD_v0.9.docx).
 
 ## What is implemented
@@ -49,6 +51,25 @@ pnpm start
 ```
 
 Server starts on `http://localhost:3000`.
+
+## Demo Mode
+
+For a stable stakeholder demo with virtual data and isolated in-memory state:
+
+Hosted demo:
+
+- https://promotion-agent-demo.vercel.app
+
+```bash
+pnpm start:demo
+```
+
+Demo mode starts on `http://localhost:3001` and:
+
+- uses a richer synthetic product dataset
+- bootstraps measurement, settlement, queue, audit, and risk activity automatically
+- keeps CRM focused on demo data instead of real discovery output
+- ignores PostgreSQL / Redis / billing adapter runtime state so the demo stays deterministic
 
 By default the app uses in-memory persistence and in-memory hot state. If `DATABASE_URL` is set, startup switches to PostgreSQL automatically. If `REDIS_URL` is set, idempotency keys and opportunity cache switch to Redis.
 

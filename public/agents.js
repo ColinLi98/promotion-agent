@@ -5,6 +5,8 @@ const leadDetailPanel = document.querySelector("#leadDetailPanel");
 const sourceForm = document.querySelector("#sourceForm");
 const leadFilters = document.querySelector("#leadFilters");
 const sourceFeedback = document.querySelector("#sourceFeedback");
+const appMode = window.__PROMOTION_AGENT_CONFIG__?.mode ?? "default";
+const defaultDataOriginFilter = appMode === "demo" ? "" : "discovered";
 
 const state = {
   selectedLeadId: null,
@@ -208,7 +210,7 @@ const load = async () => {
     api.get(`/agent-leads?${query.toString()}`),
   ]);
   if (leads.length === 0) {
-    if ((query.get("dataOrigin") ?? "discovered") === "discovered") {
+    if ((query.get("dataOrigin") ?? defaultDataOriginFilter) === "discovered") {
       sourceFeedback.textContent = "当前还没有真实 discovered leads。先运行上方真实 source crawl，或把 Data Origin 切回 seed 查看历史样例。";
     } else {
       sourceFeedback.textContent = "当前筛选条件下没有匹配结果。";
@@ -243,7 +245,7 @@ leadFilters.addEventListener("submit", async (event) => {
   await load();
 });
 
-leadFilters.querySelector('[name="dataOrigin"]').value = "discovered";
+leadFilters.querySelector('[name="dataOrigin"]').value = defaultDataOriginFilter;
 
 document.addEventListener("click", async (event) => {
   const target = event.target;

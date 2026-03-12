@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
+    "start:demo": "APP_MODE=demo PORT=3001 tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "db:init": "tsx scripts/db-init.ts",
     "db:embedded": "tsx scripts/start-embedded-postgres.ts",
