@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Promotion Agent - Risk Center</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="console-shell">
+      <aside class="sidebar">
+        <div class="sidebar-brand">
+          <div class="brand-mark">PA</div>
+          <div class="brand-copy">
+            <p class="brand-kicker">Promotion Agent</p>
+            <h1 class="brand-title">Risk Center</h1>
+            <p class="brand-subtitle">Cases, reputation, and appeals in one decisioning surface.</p>
+          </div>
+        </div>
+        <nav class="sidebar-nav">
+          <a class="sidebar-link" href="/">Workbench</a>
+          <a class="sidebar-link" href="/agents">Agent CRM</a>
+          <a class="sidebar-link" href="/measurement">Measurement</a>
+          <a class="sidebar-link is-active" href="/risk">Risk Center</a>
+          <a class="sidebar-link" href="/evidence">Evidence Center</a>
+          <a class="sidebar-link" href="/audit.html">Audit</a>
+          <a class="sidebar-link" href="/dlq.html">DLQ</a>
+        </nav>
+      </aside>
+
+      <div class="workspace">
+        <header class="topbar">
+          <div class="topbar-copy">
+            <p class="topbar-kicker">Risk Center</p>
+            <h2 class="topbar-title">风险案件、信誉记录与申诉处理</h2>
+            <p class="topbar-subtitle">把风险处理从零散备注升级成标准化案件流、信誉流和申诉流。</p>
+          </div>
+          <div class="topbar-actions">
+            <a class="button button-subtle" href="/">返回主控台</a>
+          </div>
+        </header>
+
+        <main class="workspace-main">
+          <section class="panel panel-span-6">
+            <div class="panel-header">
+              <div class="panel-header-copy">
+                <p class="panel-kicker">Risk Cases</p>
+                <h3 class="panel-title">风险案件</h3>
+              </div>
+            </div>
+            <form id="riskForm" class="form-grid">
+              <label><span>Entity Type</span><select name="entityType"><option value="campaign">campaign</option><option value="partner">partner</option><option value="agent_lead">agent_lead</option></select></label>
+              <label><span>Entity ID</span><input name="entityId" value="cmp_signalstack" required /></label>
+              <label><span>Reason</span><select name="reasonType"><option value="claim_mismatch">claim_mismatch</option><option value="disclosure_missing">disclosure_missing</option><option value="spam">spam</option><option value="high_complaint">high_complaint</option><option value="policy_violation">policy_violation</option></select></label>
+              <label><span>Severity</span><select name="severity"><option value="medium">medium</option><option value="high">high</option><option value="critical">critical</option></select></label>
+              <div class="form-actions span-2"><button type="submit" class="button button-primary">新增 Risk Case</button><span id="riskFeedback" class="inline-feedback"></span></div>
+            </form>
+            <form id="riskFilters" class="form-grid">
+              <label><span>Status</span><select name="status"><option value="">All</option><option value="open">open</option><option value="reviewing">reviewing</option><option value="resolved">resolved</option><option value="dismissed">dismissed</option></select></label>
+              <label><span>Severity</span><select name="severity"><option value="">All</option><option value="low">low</option><option value="medium">medium</option><option value="high">high</option><option value="critical">critical</option></select></label>
+              <label><span>Entity Type</span><select name="entityType"><option value="">All</option><option value="campaign">campaign</option><option value="partner">partner</option><option value="agent_lead">agent_lead</option><option value="settlement">settlement</option><option value="receipt">receipt</option></select></label>
+              <label><span>Owner</span><input name="ownerId" placeholder="risk:irene" /></label>
+              <label><span>Date From</span><input name="dateFrom" type="date" /></label>
+              <label><span>Date To</span><input name="dateTo" type="date" /></label>
+              <div class="form-actions span-2"><button type="submit" class="button button-subtle">应用筛选</button></div>
+            </form>
+            <div class="split-layout">
+              <div class="data-table-wrap"><table class="data-table data-table--sticky-first"><thead><tr><th>Case</th><th>Entity</th><th>Severity</th><th>Status</th><th>Owner</th></tr></thead><tbody id="riskCaseBody"></tbody></table></div>
+              <aside id="riskDetailPanel" class="detail-panel"></aside>
+            </div>
+          </section>
+
+          <section class="panel panel-span-6">
+            <div class="panel-header">
+              <div class="panel-header-copy">
+                <p class="panel-kicker">Reputation</p>
+                <h3 class="panel-title">信誉记录</h3>
+              </div>
+            </div>
+            <div class="data-table-wrap"><table class="data-table data-table--sticky-first"><thead><tr><th>Record</th><th>Partner</th><th>Delta</th><th>Reason</th><th>Dispute</th></tr></thead><tbody id="reputationBody"></tbody></table></div>
+          </section>
+
+          <section class="panel panel-wide">
+            <div class="panel-header">
+              <div class="panel-header-copy">
+                <p class="panel-kicker">Appeals</p>
+                <h3 class="panel-title">申诉流</h3>
+              </div>
+            </div>
+            <form id="appealForm" class="form-grid">
+              <label><span>Partner</span><input name="partnerId" value="partner_procure_pilot" required /></label>
+              <label><span>Target Record</span><input name="targetRecordId" value="rep_partner_procurepilot_01" required /></label>
+              <label class="span-2"><span>Statement</span><input name="statement" value="Requesting operator review." required /></label>
+              <div class="form-actions span-2"><button type="submit" class="button button-primary">提交 Appeal</button><span id="appealFeedback" class="inline-feedback"></span></div>
+            </form>
+            <div class="data-table-wrap"><table class="data-table data-table--sticky-first"><thead><tr><th>Appeal</th><th>Partner</th><th>Status</th><th>Opened</th></tr></thead><tbody id="appealBody"></tbody></table></div>
+          </section>
+        </main>
+      </div>
+    </div>
+    <script type="module" src="/risk.js"></script>
+  </body>
+</html>

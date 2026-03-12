@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Promotion Agent - Lead Detail</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="console-shell">
+      <aside class="sidebar">
+        <div class="sidebar-brand">
+          <div class="brand-mark">PA</div>
+          <div class="brand-copy">
+            <p class="brand-kicker">Promotion Agent</p>
+            <h1 class="brand-title">Lead Detail</h1>
+            <p class="brand-subtitle">Deep verification and owner handoff for a single agent lead.</p>
+          </div>
+        </div>
+        <nav class="sidebar-nav">
+          <a class="sidebar-link" href="/">Workbench</a>
+          <a class="sidebar-link is-active" href="/agents">Agent CRM</a>
+          <a class="sidebar-link" href="/measurement">Measurement</a>
+          <a class="sidebar-link" href="/risk">Risk Center</a>
+          <a class="sidebar-link" href="/evidence">Evidence Center</a>
+          <a class="sidebar-link" href="/audit.html">Audit</a>
+          <a class="sidebar-link" href="/dlq.html">DLQ</a>
+        </nav>
+      </aside>
+
+      <div class="workspace">
+        <header class="topbar">
+          <div class="topbar-copy">
+            <p class="topbar-kicker">Lead Detail</p>
+            <h2 id="leadTitle" class="topbar-title">Agent Lead</h2>
+            <p id="leadSubtitle" class="topbar-subtitle">查看发现信息、评分拆解、验证流转和备注。</p>
+          </div>
+          <div class="topbar-actions">
+            <a class="button button-subtle" href="/agents">返回 Agent CRM</a>
+          </div>
+        </header>
+
+        <main class="workspace-main">
+          <section class="panel panel-span-6">
+            <div class="panel-header">
+              <div class="panel-header-copy">
+                <p class="panel-kicker">Summary</p>
+                <h3 class="panel-title">Lead 概览</h3>
+              </div>
+            </div>
+            <div id="leadSummary" class="detail-grid"></div>
+          </section>
+
+          <section class="panel panel-span-6">
+            <div class="panel-header">
+              <div class="panel-header-copy">
+                <p class="panel-kicker">Verification</p>
+                <h3 class="panel-title">状态流转与操作</h3>
+              </div>
+            </div>
+            <form id="statusForm" class="form-grid">
+              <label>
+                <span>Next Status</span>
+                <select name="nextStatus">
+                  <option value="reviewing">reviewing</option>
+                  <option value="verified">verified</option>
+                  <option value="active">active</option>
+                  <option value="suspended">suspended</option>
+                </select>
+              </label>
+              <label>
+                <span>Actor</span>
+                <input name="actorId" value="ops:alice" required />
+              </label>
+              <label class="span-2">
+                <span>Comment</span>
+                <input name="comment" value="Verified in CRM detail page." required />
+              </label>
+              <div class="form-actions span-2">
+                <button type="submit" class="button button-primary">更新状态</button>
+                <span id="statusFeedback" class="inline-feedback"></span>
+              </div>
+            </form>
+          </section>
+
+          <section class="panel panel-wide">
+            <div class="panel-header">
+              <div class="panel-header-copy">
+                <p class="panel-kicker">History</p>
+                <h3 class="panel-title">Verification 历史</h3>
+              </div>
+            </div>
+            <div id="verificationHistory" class="stack"></div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <script type="module" src="/agent-detail.js"></script>
+  </body>
+</html>

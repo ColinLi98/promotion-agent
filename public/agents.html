@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Promotion Agent - Agent CRM</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="console-shell">
+      <aside class="sidebar">
+        <div class="sidebar-brand">
+          <div class="brand-mark">PA</div>
+          <div class="brand-copy">
+            <p class="brand-kicker">Promotion Agent</p>
+            <h1 class="brand-title">Control Suite</h1>
+            <p class="brand-subtitle">A unified operating surface for discovery, verification, and monetized agent distribution.</p>
+          </div>
+        </div>
+        <nav class="sidebar-nav">
+          <a class="sidebar-link" href="/"><span class="sidebar-link-label"><span class="sidebar-link-title">Workbench</span><span class="sidebar-link-meta">overview</span></span></a>
+          <a class="sidebar-link is-active" href="/agents"><span class="sidebar-link-label"><span class="sidebar-link-title">Agent CRM</span><span class="sidebar-link-meta">discovery and verification</span></span></a>
+          <a class="sidebar-link" href="/measurement"><span class="sidebar-link-label"><span class="sidebar-link-title">Measurement</span><span class="sidebar-link-meta">funnel and attribution</span></span></a>
+          <a class="sidebar-link" href="/risk"><span class="sidebar-link-label"><span class="sidebar-link-title">Risk Center</span><span class="sidebar-link-meta">cases and appeals</span></span></a>
+          <a class="sidebar-link" href="/evidence"><span class="sidebar-link-label"><span class="sidebar-link-title">Evidence Center</span><span class="sidebar-link-meta">proof assets</span></span></a>
+          <a class="sidebar-link" href="/audit.html"><span class="sidebar-link-label"><span class="sidebar-link-title">Audit</span><span class="sidebar-link-meta">trace drill-down</span></span></a>
+          <a class="sidebar-link" href="/dlq.html"><span class="sidebar-link-label"><span class="sidebar-link-title">DLQ</span><span class="sidebar-link-meta">manual operations</span></span></a>
+        </nav>
+      </aside>
+
+      <div class="workspace">
+        <header class="topbar">
+          <div class="topbar-copy">
+            <p class="topbar-kicker">Agent CRM</p>
+            <h2 class="topbar-title">Discovery、筛选、验证与跟进统一视图</h2>
+            <p class="topbar-subtitle">把 source 管理、crawl 运行、lead scoring、owner 分配和 verification 历史放进一套真正能运作的 CRM 结构里。</p>
+          </div>
+          <div class="topbar-actions">
+            <a class="button button-subtle" href="/">返回主控台</a>
+          </div>
+        </header>
+
+        <main class="workspace-main">
+          <section class="panel panel-wide">
+            <div class="panel-header">
+              <div class="panel-header-copy">
+                <p class="panel-kicker">Discovery Sources</p>
+                <h3 class="panel-title">抓取来源与运行记录</h3>
+                <p class="panel-note">来源配置和 crawl 记录放在同一个工作区里，方便运营直接发起 discovery run 并观察结果。</p>
+              </div>
+            </div>
+            <div class="overview-grid">
+              <div class="panel">
+                <div class="panel-header">
+                  <div class="panel-header-copy">
+                    <p class="panel-kicker">New Source</p>
+                    <h3 class="panel-title">新增 Source</h3>
+                  </div>
+                </div>
+                <form id="sourceForm" class="form-grid">
+                  <label>
+                    <span>Source Type</span>
+                    <select name="sourceType">
+                      <option value="public_registry">public_registry</option>
+                      <option value="partner_directory">partner_directory</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Name</span>
+                    <input name="name" value="New Public Source" required />
+                  </label>
+                  <label class="span-2">
+                    <span>Base URL</span>
+                    <input name="baseUrl" placeholder="https://registry.example.com" required />
+                  </label>
+                  <label class="span-2">
+                    <span>Seed URL</span>
+                    <input name="seedUrl" placeholder="https://registry.example.com/agents" required />
+                  </label>
+                  <div class="form-actions span-2">
+                    <button type="submit" class="button button-primary">新增 Source</button>
+                    <span id="sourceFeedback" class="inline-feedback"></span>
+                  </div>
+                </form>
+              </div>
+              <div class="panel">
+                <div class="panel-header">
+                  <div class="panel-header-copy">
+                    <p class="panel-kicker">Active Sources</p>
+                    <h3 class="panel-title">来源列表</h3>
+                  </div>
+                </div>
+                <div id="sourceList" class="stack"></div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-header">
+                <div class="panel-header-copy">
+                  <p class="panel-kicker">Recent Runs</p>
+                  <h3 class="panel-title">Discovery Runs</h3>
+                </div>
+              </div>
+              <div id="runList" class="stack"></div>
+            </div>
+          </section>
+
+          <section class="panel panel-wide">
+            <div class="panel-header">
+              <div class="panel-header-copy">
+                <p class="panel-kicker">Lead Inventory</p>
+                <h3 class="panel-title">Agent Leads</h3>
+                <p class="panel-note">统一用 filter bar + dense table 的结构浏览 lead，详情页再承接 verification 和 owner 操作。</p>
+              </div>
+            </div>
+            <form id="leadFilters" class="form-grid">
+              <label>
+                <span>Status</span>
+                <select name="status">
+                  <option value="">All</option>
+                  <option value="new">new</option>
+                  <option value="reviewing">reviewing</option>
+                  <option value="verified">verified</option>
+                  <option value="active">active</option>
+                  <option value="suspended">suspended</option>
+                </select>
+              </label>
+              <label>
+                <span>Source Type</span>
+                <select name="sourceType">
+                  <option value="">All</option>
+                  <option value="public_registry">public_registry</option>
+                  <option value="partner_directory">partner_directory</option>
+                </select>
+              </label>
+              <label>
+                <span>Data Origin</span>
+                <select name="dataOrigin">
+                  <option value="discovered" selected>discovered</option>
+                  <option value="seed">seed</option>
+                  <option value="">all</option>
+                </select>
+              </label>
+              <label>
+                <span>Vertical</span>
+                <input name="vertical" placeholder="crm_software" />
+              </label>
+              <label>
+                <span>Geo</span>
+                <input name="geo" placeholder="UK" />
+              </label>
+              <label>
+                <span>Owner</span>
+                <input name="owner" placeholder="ops:alice" />
+              </label>
+              <label>
+                <span>Missing Fields</span>
+                <select name="hasMissingFields">
+                  <option value="">All</option>
+                  <option value="true">true</option>
+                  <option value="false">false</option>
+                </select>
+              </label>
+              <div class="form-actions span-2">
+                <button type="submit" class="button button-primary">应用筛选</button>
+              </div>
+            </form>
+            <div class="split-layout">
+              <div class="data-table-wrap">
+                <table class="data-table data-table--sticky-first">
+                  <thead>
+                  <tr>
+                    <th>Lead</th>
+                    <th>Origin</th>
+                    <th>Status</th>
+                    <th>Source</th>
+                      <th>Scores</th>
+                      <th>Missing</th>
+                      <th>Owner</th>
+                    </tr>
+                  </thead>
+                  <tbody id="leadTableBody"></tbody>
+                </table>
+              </div>
+              <aside id="leadDetailPanel" class="detail-panel"></aside>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <script type="module" src="/agents.js"></script>
+  </body>
+</html>

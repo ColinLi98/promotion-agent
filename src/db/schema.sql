@@ -1,6 +1,9 @@
 CREATE TABLE IF NOT EXISTS agent_leads (
   agent_id TEXT PRIMARY KEY,
+  data_origin TEXT NOT NULL DEFAULT 'seed',
   source TEXT NOT NULL,
+  source_type TEXT NOT NULL DEFAULT 'public_registry',
+  source_ref TEXT NOT NULL DEFAULT '',
   provider_org TEXT NOT NULL,
   card_url TEXT NOT NULL,
   verticals JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -11,7 +14,74 @@ CREATE TABLE IF NOT EXISTS agent_leads (
   supports_disclosure BOOLEAN NOT NULL,
   trust_seed DOUBLE PRECISION NOT NULL,
   lead_score DOUBLE PRECISION NOT NULL,
+  discovered_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  endpoint_url TEXT,
+  contact_ref TEXT,
+  missing_fields JSONB NOT NULL DEFAULT '[]'::jsonb,
+  reach_proxy DOUBLE PRECISION NOT NULL DEFAULT 0,
+  monetization_readiness DOUBLE PRECISION NOT NULL DEFAULT 0,
+  verification_status TEXT NOT NULL DEFAULT 'new',
+  assigned_owner TEXT,
+  notes TEXT NOT NULL DEFAULT '',
+  dedupe_key TEXT NOT NULL DEFAULT '',
+  score_breakdown JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TEXT NOT NULL
+);
+
+ALTER TABLE agent_leads ADD COLUMN IF NOT EXISTS source_type TEXT NOT NULL DEFAULT 'public_registry';
+ALTER TABLE agent_leads ADD COLUMN IF NOT EXISTS data_origin TEXT NOT NULL DEFAULT 'seed';
+ALTER TABLE agent_leads ADD COLUMN IF NOT EXISTS source_ref TEXT NOT NULL DEFAULT '';
+ALTER TABLE agent_leads ADD COLUMN IF NOT EXISTS discovered_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE agent_leads ADD COLUMN IF NOT EXISTS last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE agent_leads ADD COLUMN IF NOT EXISTS endpoint_url TEXT;
+ALTER TABLE agent_leads ADD COLUMN IF NOT EXISTS contact_ref TEXT;
+ALTER TABLE agent_leads ADD COLUMN IF NOT EXISTS missing_fields JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE agent_leads ADD COLUMN IF NOT EXISTS reach_proxy DOUBLE PRECISION NOT NULL DEFAULT 0;
+ALTER TABLE agent_leads ADD COLUMN IF NOT EXISTS monetization_readiness DOUBLE PRECISION NOT NULL DEFAULT 0;
+ALTER TABLE agent_leads ADD COLUMN IF NOT EXISTS verification_status TEXT NOT NULL DEFAULT 'new';
+ALTER TABLE agent_leads ADD COLUMN IF NOT EXISTS assigned_owner TEXT;
+ALTER TABLE agent_leads ADD COLUMN IF NOT EXISTS notes TEXT NOT NULL DEFAULT '';
+ALTER TABLE agent_leads ADD COLUMN IF NOT EXISTS dedupe_key TEXT NOT NULL DEFAULT '';
+ALTER TABLE agent_leads ADD COLUMN IF NOT EXISTS score_breakdown JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+CREATE TABLE IF NOT EXISTS discovery_sources (
+  source_id TEXT PRIMARY KEY,
+  source_type TEXT NOT NULL,
+  name TEXT NOT NULL,
+  base_url TEXT NOT NULL,
+  seed_urls JSONB NOT NULL DEFAULT '[]'::jsonb,
+  active BOOLEAN NOT NULL,
+  crawl_policy JSONB NOT NULL DEFAULT '{}'::jsonb,
+  vertical_hints JSONB NOT NULL DEFAULT '[]'::jsonb,
+  geo_hints JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS discovery_runs (
+  run_id TEXT PRIMARY KEY,
+  source_id TEXT NOT NULL REFERENCES discovery_sources(source_id),
+  status TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  finished_at TEXT,
+  discovered_count INTEGER NOT NULL,
+  created_lead_count INTEGER NOT NULL,
+  deduped_count INTEGER NOT NULL,
+  error_count INTEGER NOT NULL,
+  trace_id TEXT NOT NULL,
+  errors JSONB NOT NULL DEFAULT '[]'::jsonb
+);
+
+CREATE TABLE IF NOT EXISTS verification_records (
+  record_id TEXT PRIMARY KEY,
+  lead_id TEXT NOT NULL REFERENCES agent_leads(agent_id),
+  previous_status TEXT NOT NULL,
+  next_status TEXT NOT NULL,
+  checklist JSONB NOT NULL DEFAULT '{}'::jsonb,
+  actor_id TEXT NOT NULL,
+  comment TEXT NOT NULL,
+  occurred_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS partner_agents (
@@ -47,6 +117,51 @@ CREATE TABLE IF NOT EXISTS campaigns (
   proof_bundle JSONB NOT NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS evidence_assets (
+  asset_id TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL REFERENCES campaigns(campaign_id),
+  type TEXT NOT NULL,
+  label TEXT NOT NULL,
+  url TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  verified_by TEXT,
+  verification_note TEXT
+);
+
+CREATE TABLE IF NOT EXISTS risk_cases (
+  case_id TEXT PRIMARY KEY,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  reason_type TEXT NOT NULL,
+  severity TEXT NOT NULL,
+  status TEXT NOT NULL,
+  opened_at TEXT NOT NULL,
+  resolved_at TEXT,
+  owner_id TEXT,
+  note TEXT
+);
+
+CREATE TABLE IF NOT EXISTS reputation_records (
+  record_id TEXT PRIMARY KEY,
+  partner_id TEXT NOT NULL REFERENCES partner_agents(partner_id),
+  delta DOUBLE PRECISION NOT NULL,
+  reason_type TEXT NOT NULL,
+  evidence_refs JSONB NOT NULL DEFAULT '[]'::jsonb,
+  dispute_status TEXT NOT NULL,
+  occurred_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS appeal_cases (
+  appeal_id TEXT PRIMARY KEY,
+  partner_id TEXT NOT NULL REFERENCES partner_agents(partner_id),
+  target_record_id TEXT NOT NULL REFERENCES reputation_records(record_id),
+  status TEXT NOT NULL,
+  statement TEXT NOT NULL,
+  opened_at TEXT NOT NULL,
+  decided_at TEXT,
+  decision_note TEXT
 );
 
 CREATE TABLE IF NOT EXISTS policy_checks (

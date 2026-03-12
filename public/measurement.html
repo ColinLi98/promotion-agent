@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Promotion Agent - Measurement</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="console-shell">
+      <aside class="sidebar">
+        <div class="sidebar-brand">
+          <div class="brand-mark">PA</div>
+          <div class="brand-copy">
+            <p class="brand-kicker">Promotion Agent</p>
+            <h1 class="brand-title">Measurement</h1>
+            <p class="brand-subtitle">Funnel metrics, attribution, and billing drafts in one operating view.</p>
+          </div>
+        </div>
+        <nav class="sidebar-nav">
+          <a class="sidebar-link" href="/">Workbench</a>
+          <a class="sidebar-link" href="/agents">Agent CRM</a>
+          <a class="sidebar-link is-active" href="/measurement">Measurement</a>
+          <a class="sidebar-link" href="/risk">Risk Center</a>
+          <a class="sidebar-link" href="/evidence">Evidence Center</a>
+          <a class="sidebar-link" href="/audit.html">Audit</a>
+          <a class="sidebar-link" href="/dlq.html">DLQ</a>
+        </nav>
+      </aside>
+
+      <div class="workspace">
+        <header class="topbar">
+          <div class="topbar-copy">
+            <p class="topbar-kicker">Measurement</p>
+            <h2 class="topbar-title">事件漏斗、归因与账单草案</h2>
+            <p class="topbar-subtitle">统一看 shortlisted 到 conversion 的事件链，帮助运营和财务在同一页对齐结果。</p>
+          </div>
+          <div class="topbar-actions">
+            <a class="button button-subtle" href="/">返回主控台</a>
+          </div>
+        </header>
+
+        <main class="workspace-main">
+          <section class="panel panel-wide">
+            <div class="panel-header">
+              <div class="panel-header-copy">
+                <p class="panel-kicker">Filters</p>
+                <h3 class="panel-title">Measurement 过滤</h3>
+              </div>
+            </div>
+            <form id="measurementFilters" class="form-grid">
+              <label><span>Campaign</span><input name="campaignId" placeholder="cmp_xxx" /></label>
+              <label><span>Partner</span><input name="partnerId" placeholder="partner_xxx" /></label>
+              <label><span>Vertical</span><input name="vertical" placeholder="crm_software" /></label>
+              <label><span>Date From</span><input name="dateFrom" type="date" /></label>
+              <label><span>Date To</span><input name="dateTo" type="date" /></label>
+              <div class="form-actions span-2">
+                <button type="submit" class="button button-primary">刷新</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="panel panel-wide">
+            <div class="panel-header">
+              <div class="panel-header-copy">
+                <p class="panel-kicker">Funnel</p>
+                <h3 class="panel-title">事件漏斗</h3>
+              </div>
+            </div>
+            <div id="funnelGrid" class="kpi-grid"></div>
+          </section>
+
+          <section class="panel panel-wide">
+            <div class="panel-header">
+              <div class="panel-header-copy">
+                <p class="panel-kicker">Attribution</p>
+                <h3 class="panel-title">归因与账单明细</h3>
+              </div>
+            </div>
+            <div class="split-layout">
+              <div class="data-table-wrap">
+                <table class="data-table data-table--sticky-first">
+                  <thead><tr><th>Campaign</th><th>Partner</th><th>Model</th><th>Billable</th><th>Amount</th></tr></thead>
+                  <tbody id="attributionBody"></tbody>
+                </table>
+              </div>
+              <aside id="measurementDetail" class="detail-panel"></aside>
+            </div>
+          </section>
+
+          <section class="panel panel-wide">
+            <div class="panel-header">
+              <div class="panel-header-copy">
+                <p class="panel-kicker">Billing Drafts</p>
+                <h3 class="panel-title">账单草案</h3>
+              </div>
+            </div>
+            <div class="split-layout">
+              <div class="data-table-wrap">
+                <table class="data-table data-table--sticky-first">
+                  <thead><tr><th>Campaign</th><th>Model</th><th>Pending</th><th>Settled</th><th>Failed</th><th>Total</th></tr></thead>
+                  <tbody id="billingDraftBody"></tbody>
+                </table>
+              </div>
+              <aside id="billingDraftDetail" class="detail-panel"></aside>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <script type="module" src="/measurement.js"></script>
+  </body>
+</html>

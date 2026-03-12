@@ -8,73 +8,109 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <div class="page-shell">
-      <header class="hero">
-        <div class="hero-copy">
-          <p class="eyebrow">Settlement DLQ</p>
-          <h1>失败结算的重放与人工处置台</h1>
-          <p class="hero-text">
-            这里用于查看失败结算、重放 dead letter、以及手动标记 resolved / ignored。
-          </p>
-          <div class="hero-actions">
-            <a class="button button-secondary" href="/">返回主控台</a>
+    <div class="console-shell">
+      <aside class="sidebar">
+        <div class="sidebar-brand">
+          <div class="brand-mark">PA</div>
+          <div class="brand-copy">
+            <p class="brand-kicker">Promotion Agent</p>
+            <h1 class="brand-title">DLQ Console</h1>
+            <p class="brand-subtitle">Manual recovery workflow for failed settlements and replay operations.</p>
           </div>
         </div>
-      </header>
+        <nav class="sidebar-nav">
+          <a class="sidebar-link" href="/">Workbench</a>
+          <a class="sidebar-link" href="/agents">Agent CRM</a>
+          <a class="sidebar-link" href="/measurement">Measurement</a>
+          <a class="sidebar-link" href="/risk">Risk Center</a>
+          <a class="sidebar-link" href="/evidence">Evidence Center</a>
+          <a class="sidebar-link" href="/audit.html">Audit</a>
+          <a class="sidebar-link is-active" href="/dlq.html">DLQ</a>
+        </nav>
+      </aside>
 
-      <main class="content-grid">
-        <section class="panel panel-wide">
-          <div class="section-head">
-            <div>
-              <p class="section-kicker">Filters</p>
-              <h2>DLQ 检索</h2>
-            </div>
-            <p class="section-note">按状态或 trace 过滤 dead letter，并支持分页。</p>
+      <div class="workspace">
+        <header class="topbar">
+          <div class="topbar-copy">
+            <p class="topbar-kicker">Settlement DLQ</p>
+            <h2 class="topbar-title">失败结算的重放与人工处置台</h2>
+            <p class="topbar-subtitle">把 replay、resolve、ignore 放到同一页的 detail panel 中，便于连续处理失败结算。</p>
           </div>
-          <form id="dlqFilterForm" class="form-grid">
-            <label>
-              <span>Status</span>
-              <select id="dlqStatusSelect" name="status">
-                <option value="">All</option>
-                <option value="open">open</option>
-                <option value="replayed">replayed</option>
-                <option value="resolved">resolved</option>
-                <option value="ignored">ignored</option>
-              </select>
-            </label>
-            <label>
-              <span>Trace ID</span>
-              <input id="dlqTraceIdInput" name="traceId" placeholder="例如 int_xxx" />
-            </label>
-            <label>
-              <span>Page Size</span>
-              <select id="dlqPageSizeSelect" name="pageSize">
-                <option value="10">10</option>
-                <option value="20" selected>20</option>
-                <option value="50">50</option>
-              </select>
-            </label>
-            <div class="form-actions">
-              <button type="submit" class="button button-primary">查询</button>
-              <span id="dlqMeta" class="inline-feedback"></span>
-            </div>
-          </form>
-        </section>
+          <div class="topbar-actions">
+            <a class="button button-subtle" href="/">返回主控台</a>
+          </div>
+        </header>
 
-        <section class="panel panel-wide">
-          <div class="section-head">
-            <div>
-              <p class="section-kicker">Entries</p>
-              <h2>DLQ 列表</h2>
+        <main class="workspace-main">
+          <section class="panel panel-wide">
+            <div class="panel-header">
+              <div class="panel-header-copy">
+                <p class="panel-kicker">Filters</p>
+                <h3 class="panel-title">DLQ 检索</h3>
+              </div>
+              <p class="panel-note">按状态或 trace 过滤 dead letter，并支持分页。</p>
             </div>
-            <div class="hero-actions">
-              <button id="dlqPrevPage" class="button button-subtle">上一页</button>
-              <button id="dlqNextPage" class="button button-subtle">下一页</button>
+            <form id="dlqFilterForm" class="form-grid">
+              <label>
+                <span>Status</span>
+                <select id="dlqStatusSelect" name="status">
+                  <option value="">All</option>
+                  <option value="open">open</option>
+                  <option value="replayed">replayed</option>
+                  <option value="resolved">resolved</option>
+                  <option value="ignored">ignored</option>
+                </select>
+              </label>
+              <label>
+                <span>Trace ID</span>
+                <input id="dlqTraceIdInput" name="traceId" placeholder="例如 int_xxx" />
+              </label>
+              <label>
+                <span>Page Size</span>
+                <select id="dlqPageSizeSelect" name="pageSize">
+                  <option value="10">10</option>
+                  <option value="20" selected>20</option>
+                  <option value="50">50</option>
+                </select>
+              </label>
+              <div class="form-actions">
+                <button type="submit" class="button button-primary">查询</button>
+                <span id="dlqMeta" class="inline-feedback"></span>
+              </div>
+            </form>
+          </section>
+
+          <section class="panel panel-wide">
+            <div class="panel-header">
+              <div class="panel-header-copy">
+                <p class="panel-kicker">Entries</p>
+                <h3 class="panel-title">DLQ 列表</h3>
+              </div>
+              <div class="toolbar-group">
+                <button id="dlqPrevPage" class="button button-subtle">上一页</button>
+                <button id="dlqNextPage" class="button button-subtle">下一页</button>
+              </div>
             </div>
-          </div>
-          <div id="dlqList" class="stack"></div>
-        </section>
-      </main>
+            <div class="split-layout">
+              <div class="data-table-wrap">
+                <table class="data-table data-table--sticky-first">
+                  <thead>
+                    <tr>
+                      <th>DLQ Entry</th>
+                      <th>Trace</th>
+                      <th>Status</th>
+                      <th>Reason</th>
+                      <th>Updated</th>
+                    </tr>
+                  </thead>
+                  <tbody id="dlqTableBody"></tbody>
+                </table>
+              </div>
+              <aside id="dlqDetailPanel" class="detail-panel"></aside>
+            </div>
+          </section>
+        </main>
+      </div>
     </div>
 
     <script type="module" src="/dlq.js"></script>

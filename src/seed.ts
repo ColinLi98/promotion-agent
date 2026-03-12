@@ -1,16 +1,73 @@
-import type { AgentLead, Campaign, PartnerAgent } from "./domain.js";
+import type {
+  AgentLead,
+  AppealCase,
+  Campaign,
+  DiscoverySource,
+  EvidenceAsset,
+  PartnerAgent,
+  ReputationRecord,
+  RiskCase,
+  VerificationRecord,
+} from "./domain.js";
 
 export type SeedData = {
+  discoverySources: DiscoverySource[];
   leads: AgentLead[];
   partners: PartnerAgent[];
   campaigns: Campaign[];
+  verificationRecords: VerificationRecord[];
+  evidenceAssets: EvidenceAsset[];
+  riskCases: RiskCase[];
+  reputationRecords: ReputationRecord[];
+  appeals: AppealCase[];
 };
 
 export const buildSeedData = (): SeedData => ({
+  discoverySources: [
+    {
+      sourceId: "src_public_registry",
+      sourceType: "public_registry",
+      name: "MCP.so Servers",
+      baseUrl: "https://mcp.so",
+      seedUrls: [
+        "https://mcp.so/servers",
+      ],
+      active: true,
+      crawlPolicy: {
+        rateLimit: 1,
+        maxDepth: 1,
+      },
+      verticalHints: ["agent_orchestration", "developer_tools", "workflow_automation"],
+      geoHints: ["US", "EU", "Global"],
+      createdAt: "2026-03-01T08:00:00.000Z",
+      updatedAt: "2026-03-11T08:00:00.000Z",
+    },
+    {
+      sourceId: "src_partner_directory",
+      sourceType: "partner_directory",
+      name: "Glama MCP Servers",
+      baseUrl: "https://glama.ai",
+      seedUrls: [
+        "https://glama.ai/mcp/servers",
+      ],
+      active: true,
+      crawlPolicy: {
+        rateLimit: 1,
+        maxDepth: 1,
+      },
+      verticalHints: ["agent_orchestration", "developer_tools", "workflow_automation"],
+      geoHints: ["US", "EU", "Global"],
+      createdAt: "2026-03-01T08:30:00.000Z",
+      updatedAt: "2026-03-11T08:30:00.000Z",
+    },
+  ],
   leads: [
     {
       agentId: "lead_crm_eu",
+      dataOrigin: "seed",
       source: "registry",
+      sourceType: "public_registry",
+      sourceRef: "registry:procure-pilot",
       providerOrg: "ProcurePilot",
       cardUrl: "https://partners.example.com/procure-pilot",
       verticals: ["crm_software", "sales_ops"],
@@ -21,10 +78,29 @@ export const buildSeedData = (): SeedData => ({
       supportsDisclosure: true,
       trustSeed: 0.81,
       leadScore: 0.86,
+      discoveredAt: "2026-03-01T09:00:00.000Z",
+      lastSeenAt: "2026-03-11T09:00:00.000Z",
+      endpointUrl: "https://partners.example.com/procure-pilot/opportunities",
+      contactRef: "bizdev@procurepilot.example.com",
+      missingFields: [],
+      reachProxy: 0.84,
+      monetizationReadiness: 0.82,
+      verificationStatus: "active",
+      assignedOwner: "ops:alice",
+      notes: "High-fit EU CRM procurement agent.",
+      dedupeKey: "procurepilot_https_partners_example_com_procure_pilot_opportunities_public_registry",
+      scoreBreakdown: {
+        icpFit: 0.9,
+        protocolFit: 0.82,
+        reachFit: 0.84,
+      },
     },
     {
       agentId: "lead_crm_cn",
+      dataOrigin: "seed",
       source: "partner_directory",
+      sourceType: "partner_directory",
+      sourceRef: "partner-directory:growthdesk",
       providerOrg: "GrowthDesk Agent",
       cardUrl: "https://partners.example.com/growthdesk",
       verticals: ["crm_software", "revops"],
@@ -35,6 +111,22 @@ export const buildSeedData = (): SeedData => ({
       supportsDisclosure: true,
       trustSeed: 0.78,
       leadScore: 0.82,
+      discoveredAt: "2026-03-02T09:00:00.000Z",
+      lastSeenAt: "2026-03-11T09:00:00.000Z",
+      endpointUrl: "https://partners.example.com/growthdesk/opportunities",
+      contactRef: "partners@growthdesk.example.com",
+      missingFields: [],
+      reachProxy: 0.76,
+      monetizationReadiness: 0.8,
+      verificationStatus: "active",
+      assignedOwner: "ops:bob",
+      notes: "Strong APAC coverage and pricing analysis capability.",
+      dedupeKey: "growthdesk_agent_https_partners_example_com_growthdesk_opportunities_partner_directory",
+      scoreBreakdown: {
+        icpFit: 0.82,
+        protocolFit: 0.78,
+        reachFit: 0.76,
+      },
     },
   ],
   partners: [
@@ -158,6 +250,99 @@ export const buildSeedData = (): SeedData => ({
         ],
         updatedAt: "2026-02-15T00:00:00.000Z",
       },
+    },
+  ],
+  verificationRecords: [
+    {
+      recordId: "verif_procurepilot_active",
+      leadId: "lead_crm_eu",
+      previousStatus: "verified",
+      nextStatus: "active",
+      checklist: {
+        identity: true,
+        auth: true,
+        disclosure: true,
+        sla: true,
+        rateLimit: true,
+      },
+      actorId: "ops:alice",
+      comment: "Activated after endpoint and disclosure review.",
+      occurredAt: "2026-03-05T11:00:00.000Z",
+    },
+    {
+      recordId: "verif_growthdesk_active",
+      leadId: "lead_crm_cn",
+      previousStatus: "verified",
+      nextStatus: "active",
+      checklist: {
+        identity: true,
+        auth: true,
+        disclosure: true,
+        sla: true,
+        rateLimit: true,
+      },
+      actorId: "ops:bob",
+      comment: "Activated after APAC partner review.",
+      occurredAt: "2026-03-06T11:00:00.000Z",
+    },
+  ],
+  evidenceAssets: [
+    {
+      assetId: "asset_hubflow_pricing",
+      campaignId: "cmp_hubflow",
+      type: "pricing",
+      label: "HubFlow pricing sheet",
+      url: "https://hubflow.example.com/pricing",
+      updatedAt: "2026-03-03T10:00:00.000Z",
+      verifiedBy: "risk:irene",
+      verificationNote: "Pricing verified against campaign copy.",
+    },
+    {
+      assetId: "asset_signalstack_soc",
+      campaignId: "cmp_signalstack",
+      type: "certificate",
+      label: "SignalStack SOC summary",
+      url: "https://signalstack.example.com/soc",
+      updatedAt: "2026-03-02T10:00:00.000Z",
+      verifiedBy: "risk:irene",
+      verificationNote: "Security certificate confirmed.",
+    },
+  ],
+  riskCases: [
+    {
+      caseId: "risk_signalstack_review",
+      entityType: "campaign",
+      entityId: "cmp_signalstack",
+      reasonType: "policy_violation",
+      severity: "medium",
+      status: "resolved",
+      openedAt: "2026-03-04T12:00:00.000Z",
+      resolvedAt: "2026-03-05T12:00:00.000Z",
+      ownerId: "risk:irene",
+      note: "Resolved after additional SOC proof was added.",
+    },
+  ],
+  reputationRecords: [
+    {
+      recordId: "rep_partner_procurepilot_01",
+      partnerId: "partner_procure_pilot",
+      delta: 4,
+      reasonType: "manual_adjustment",
+      evidenceRefs: [],
+      disputeStatus: "none",
+      occurredAt: "2026-03-05T12:00:00.000Z",
+    },
+  ],
+  appeals: [
+    {
+      appealId: "appeal_procurepilot_01",
+      partnerId: "partner_procure_pilot",
+      targetRecordId: "rep_partner_procurepilot_01",
+      status: "approved",
+      statement: "Requesting review of manual adjustment rationale.",
+      openedAt: "2026-03-06T15:00:00.000Z",
+      decidedAt: "2026-03-07T15:00:00.000Z",
+      decisionNote: "Clarified and approved by risk team.",
     },
   ],
 });

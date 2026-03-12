@@ -28,7 +28,10 @@ export const EventTypeSchema = z.enum([
 
 export const AgentLeadSchema = z.object({
   agentId: z.string(),
+  dataOrigin: z.enum(["seed", "discovered"]),
   source: z.string(),
+  sourceType: z.enum(["public_registry", "partner_directory"]),
+  sourceRef: z.string(),
   providerOrg: z.string(),
   cardUrl: z.string().url(),
   verticals: z.array(z.string()),
@@ -39,6 +42,86 @@ export const AgentLeadSchema = z.object({
   supportsDisclosure: z.boolean(),
   trustSeed: z.number().min(0).max(1),
   leadScore: z.number().min(0).max(1),
+  discoveredAt: z.string().datetime(),
+  lastSeenAt: z.string().datetime(),
+  endpointUrl: z.string().url().nullable(),
+  contactRef: z.string().nullable(),
+  missingFields: z.array(z.string()),
+  reachProxy: z.number().min(0).max(1),
+  monetizationReadiness: z.number().min(0).max(1),
+  verificationStatus: PartnerStatusSchema,
+  assignedOwner: z.string().nullable(),
+  notes: z.string(),
+  dedupeKey: z.string(),
+  scoreBreakdown: z.object({
+    icpFit: z.number().min(0).max(1),
+    protocolFit: z.number().min(0).max(1),
+    reachFit: z.number().min(0).max(1),
+  }),
+});
+
+export const DiscoverySourceSchema = z.object({
+  sourceId: z.string(),
+  sourceType: z.enum(["public_registry", "partner_directory"]),
+  name: z.string(),
+  baseUrl: z.string().url(),
+  seedUrls: z.array(z.string().url()).min(1),
+  active: z.boolean(),
+  crawlPolicy: z.object({
+    rateLimit: z.number().positive(),
+    maxDepth: z.number().int().positive(),
+  }),
+  verticalHints: z.array(z.string()),
+  geoHints: z.array(z.string()),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export const DiscoverySourceInputSchema = z.object({
+  sourceType: z.enum(["public_registry", "partner_directory"]),
+  name: z.string(),
+  baseUrl: z.string().url(),
+  seedUrls: z.array(z.string().url()).min(1),
+  active: z.boolean().default(true),
+  crawlPolicy: z.object({
+    rateLimit: z.number().positive().default(1),
+    maxDepth: z.number().int().positive().default(1),
+  }),
+  verticalHints: z.array(z.string()).default([]),
+  geoHints: z.array(z.string()).default([]),
+});
+
+export const DiscoveryRunSchema = z.object({
+  runId: z.string(),
+  sourceId: z.string(),
+  status: z.enum(["queued", "running", "completed", "failed"]),
+  startedAt: z.string().datetime(),
+  finishedAt: z.string().datetime().nullable(),
+  discoveredCount: z.number().int().nonnegative(),
+  createdLeadCount: z.number().int().nonnegative(),
+  dedupedCount: z.number().int().nonnegative(),
+  errorCount: z.number().int().nonnegative(),
+  traceId: z.string(),
+  errors: z.array(z.string()),
+});
+
+export const VerificationChecklistSchema = z.object({
+  identity: z.boolean(),
+  auth: z.boolean(),
+  disclosure: z.boolean(),
+  sla: z.boolean(),
+  rateLimit: z.boolean(),
+});
+
+export const VerificationRecordSchema = z.object({
+  recordId: z.string(),
+  leadId: z.string(),
+  previousStatus: PartnerStatusSchema,
+  nextStatus: PartnerStatusSchema,
+  checklist: VerificationChecklistSchema,
+  actorId: z.string(),
+  comment: z.string(),
+  occurredAt: z.string().datetime(),
 });
 
 export const PartnerAgentSchema = z.object({
@@ -256,6 +339,11 @@ export const DashboardSnapshotSchema = z.object({
   eventCounts: z.record(EventTypeSchema, z.number().int().nonnegative()),
   settlementCount: z.number().int().nonnegative(),
   qualifiedRecommendationRate: z.number().min(0).max(1),
+  detailViewRate: z.number().min(0).max(1),
+  handoffRate: z.number().min(0).max(1),
+  actionConversionRate: z.number().min(0).max(1),
+  disclosureShownRate: z.number().min(0).max(1),
+  qualifiedAgentCoverage: z.number().int().nonnegative(),
 });
 
 export const AuditEntityTypeSchema = z.enum([
@@ -328,6 +416,116 @@ export const ProductDraftSchema = z.object({
   positioningBullets: z.array(z.string()).default([]),
 });
 
+export const EvidenceAssetSchema = z.object({
+  assetId: z.string(),
+  campaignId: z.string(),
+  type: z.enum(["pricing", "case_study", "certificate", "doc", "screenshot", "faq"]),
+  label: z.string(),
+  url: z.string().url(),
+  updatedAt: z.string().datetime(),
+  verifiedBy: z.string().nullable(),
+  verificationNote: z.string().nullable(),
+});
+
+export const EvidenceAssetInputSchema = z.object({
+  campaignId: z.string(),
+  type: z.enum(["pricing", "case_study", "certificate", "doc", "screenshot", "faq"]),
+  label: z.string(),
+  url: z.string().url(),
+  verifiedBy: z.string().nullable().optional(),
+  verificationNote: z.string().nullable().optional(),
+});
+
+export const RiskCaseSchema = z.object({
+  caseId: z.string(),
+  entityType: z.enum(["campaign", "partner", "agent_lead", "settlement", "receipt"]),
+  entityId: z.string(),
+  reasonType: z.enum(["claim_mismatch", "disclosure_missing", "spam", "high_complaint", "policy_violation"]),
+  severity: z.enum(["low", "medium", "high", "critical"]),
+  status: z.enum(["open", "reviewing", "resolved", "dismissed"]),
+  openedAt: z.string().datetime(),
+  resolvedAt: z.string().datetime().nullable(),
+  ownerId: z.string().nullable(),
+  note: z.string().nullable(),
+});
+
+export const RiskCaseInputSchema = z.object({
+  entityType: z.enum(["campaign", "partner", "agent_lead", "settlement", "receipt"]),
+  entityId: z.string(),
+  reasonType: z.enum(["claim_mismatch", "disclosure_missing", "spam", "high_complaint", "policy_violation"]),
+  severity: z.enum(["low", "medium", "high", "critical"]),
+  ownerId: z.string().nullable().optional(),
+  note: z.string().nullable().optional(),
+});
+
+export const ReputationRecordSchema = z.object({
+  recordId: z.string(),
+  partnerId: z.string(),
+  delta: z.number(),
+  reasonType: z.enum(["claim_mismatch", "disclosure_missing", "spam", "high_complaint", "manual_adjustment"]),
+  evidenceRefs: z.array(z.string()),
+  disputeStatus: z.enum(["none", "under_review", "resolved", "overturned"]),
+  occurredAt: z.string().datetime(),
+});
+
+export const AppealCaseSchema = z.object({
+  appealId: z.string(),
+  partnerId: z.string(),
+  targetRecordId: z.string(),
+  status: z.enum(["open", "reviewing", "approved", "rejected"]),
+  statement: z.string(),
+  openedAt: z.string().datetime(),
+  decidedAt: z.string().datetime().nullable(),
+  decisionNote: z.string().nullable(),
+});
+
+export const AppealCaseInputSchema = z.object({
+  partnerId: z.string(),
+  targetRecordId: z.string(),
+  statement: z.string(),
+});
+
+export const MeasurementFunnelQuerySchema = z.object({
+  campaignId: z.string().optional(),
+  partnerId: z.string().optional(),
+  vertical: z.string().optional(),
+  dateFrom: z.string().datetime().optional(),
+  dateTo: z.string().datetime().optional(),
+});
+
+export const MeasurementFunnelSchema = z.object({
+  shortlisted: z.number().int().nonnegative(),
+  shown: z.number().int().nonnegative(),
+  detailView: z.number().int().nonnegative(),
+  handoff: z.number().int().nonnegative(),
+  conversion: z.number().int().nonnegative(),
+  detailViewRate: z.number().min(0).max(1),
+  handoffRate: z.number().min(0).max(1),
+  actionConversionRate: z.number().min(0).max(1),
+});
+
+export const AttributionRowSchema = z.object({
+  campaignId: z.string(),
+  partnerId: z.string().nullable(),
+  billingModel: BillingModelSchema,
+  shortlisted: z.number().int().nonnegative(),
+  conversions: z.number().int().nonnegative(),
+  billableEvents: z.number().int().nonnegative(),
+  billedAmount: z.number().nonnegative(),
+  currency: z.string().length(3),
+});
+
+export const BillingDraftSchema = z.object({
+  campaignId: z.string(),
+  partnerId: z.string().nullable(),
+  billingModel: BillingModelSchema,
+  pendingSettlements: z.number().int().nonnegative(),
+  settledSettlements: z.number().int().nonnegative(),
+  failedSettlements: z.number().int().nonnegative(),
+  totalAmount: z.number().nonnegative(),
+  currency: z.string().length(3),
+});
+
 export const CampaignDraftInputSchema = z.object({
   advertiser: z.string(),
   category: z.string(),
@@ -354,6 +552,8 @@ export const PolicyCheckResultSchema = z.object({
 });
 
 export type AgentLead = z.infer<typeof AgentLeadSchema>;
+export type AppealCase = z.infer<typeof AppealCaseSchema>;
+export type AppealCaseInput = z.infer<typeof AppealCaseInputSchema>;
 export type AuditActorType = z.infer<typeof AuditActorTypeSchema>;
 export type AuditEntityType = z.infer<typeof AuditEntityTypeSchema>;
 export type AuditEvent = z.infer<typeof AuditEventSchema>;
@@ -361,18 +561,29 @@ export type AuditEventFilter = z.infer<typeof AuditEventFilterSchema>;
 export type AuditEventPage = z.infer<typeof AuditEventPageSchema>;
 export type AuditStatus = z.infer<typeof AuditStatusSchema>;
 export type BillingModel = z.infer<typeof BillingModelSchema>;
+export type BillingDraft = z.infer<typeof BillingDraftSchema>;
 export type Campaign = z.infer<typeof CampaignSchema>;
 export type CampaignDraftInput = z.infer<typeof CampaignDraftInputSchema>;
 export type CampaignStatus = z.infer<typeof CampaignStatusSchema>;
 export type DashboardSnapshot = z.infer<typeof DashboardSnapshotSchema>;
+export type DiscoveryRun = z.infer<typeof DiscoveryRunSchema>;
+export type DiscoverySource = z.infer<typeof DiscoverySourceSchema>;
+export type DiscoverySourceInput = z.infer<typeof DiscoverySourceInputSchema>;
+export type EvidenceAsset = z.infer<typeof EvidenceAssetSchema>;
+export type EvidenceAssetInput = z.infer<typeof EvidenceAssetInputSchema>;
 export type EvaluationResponse = z.infer<typeof EvaluationResponseSchema>;
 export type EventReceipt = z.infer<typeof EventReceiptSchema>;
 export type EventType = z.infer<typeof EventTypeSchema>;
+export type MeasurementFunnel = z.infer<typeof MeasurementFunnelSchema>;
+export type MeasurementFunnelQuery = z.infer<typeof MeasurementFunnelQuerySchema>;
 export type OfferCard = z.infer<typeof OfferCardSchema>;
 export type OpportunityRequest = z.infer<typeof OpportunityRequestSchema>;
 export type PartnerAgent = z.infer<typeof PartnerAgentSchema>;
 export type PolicyCheckResult = z.infer<typeof PolicyCheckResultSchema>;
 export type ProductDraft = z.infer<typeof ProductDraftSchema>;
+export type ReputationRecord = z.infer<typeof ReputationRecordSchema>;
+export type RiskCase = z.infer<typeof RiskCaseSchema>;
+export type RiskCaseInput = z.infer<typeof RiskCaseInputSchema>;
 export type ScoredBid = z.infer<typeof ScoredBidSchema>;
 export type SettlementReceipt = z.infer<typeof SettlementReceiptSchema>;
 export type SettlementRetryJob = z.infer<typeof SettlementRetryJobSchema>;
@@ -380,3 +591,6 @@ export type SettlementRetryJobFilter = z.infer<typeof SettlementRetryJobFilterSc
 export type SettlementDeadLetterEntry = z.infer<typeof SettlementDeadLetterEntrySchema>;
 export type SettlementDeadLetterFilter = z.infer<typeof SettlementDeadLetterFilterSchema>;
 export type SettlementDeadLetterPage = z.infer<typeof SettlementDeadLetterPageSchema>;
+export type VerificationChecklist = z.infer<typeof VerificationChecklistSchema>;
+export type VerificationRecord = z.infer<typeof VerificationRecordSchema>;
+export type AttributionRow = z.infer<typeof AttributionRowSchema>;

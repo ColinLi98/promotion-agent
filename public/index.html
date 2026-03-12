@@ -8,73 +8,210 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <div class="page-shell">
-      <header class="hero">
-        <div class="hero-copy">
-          <p class="eyebrow">Promotion Agent</p>
-          <h1>可披露的 Agent Sponsored Recommendation Control Room</h1>
-          <p class="hero-text">
-            当前这版已经不是空 PRD。后端闭环已经打通：活动创建、Offer 编译、Policy 预检、激活、机会评估、回执和结算都能跑。
-          </p>
-          <div class="hero-actions">
-            <button id="refreshAll" class="button button-primary">刷新状态</button>
-            <a class="button button-secondary" href="#opportunityLab">评估机会</a>
+    <div class="site-shell">
+      <header class="site-header">
+        <div class="site-brand">
+          <div class="brand-mark">PA</div>
+          <div class="site-brand-copy">
+            <p class="brand-kicker">Promotion Agent</p>
+            <h1 class="panel-title">Operator Workbench</h1>
+            <p class="meta-row">Discovery, campaign operations, settlement, and governance in one browser-first console.</p>
           </div>
         </div>
-        <div class="hero-panel">
-          <div class="signal-card">
-            <p class="signal-label">System Status</p>
+        <nav class="site-nav">
+          <a class="button button-subtle" href="/agents">Agent CRM</a>
+          <a class="button button-subtle" href="/measurement">Measurement</a>
+          <a class="button button-subtle" href="/risk">Risk Center</a>
+          <a class="button button-subtle" href="/evidence">Evidence Center</a>
+          <a class="button button-subtle" href="/audit.html">Audit</a>
+          <a class="button button-subtle" href="/dlq.html">DLQ</a>
+        </nav>
+      </header>
+
+      <section class="hero-card">
+        <div class="hero-grid">
+          <div>
+            <p class="topbar-kicker">Promotion Control Room</p>
+            <h2 class="topbar-title">把 Agent 分发、审核与结算压进一张真正能工作的网页端工作台</h2>
+            <p class="topbar-subtitle">
+              首页现在聚焦四件事：看系统是否健康、推进活动、观察 partner 质量、以及追踪队列与审计异常。更深的操作都通过 drill-down 页面承接。
+            </p>
+          </div>
+          <div class="topbar-actions">
+            <button id="refreshAll" class="button button-primary">刷新状态</button>
+            <a class="button button-subtle" href="#campaignBuilder">创建活动</a>
+            <a class="button button-subtle" href="#opportunityLab">运行评估</a>
+          </div>
+          <div class="stats-grid" id="summaryCards"></div>
+        </div>
+        <div class="detail-panel">
+          <div class="detail-section">
+            <p class="detail-section-title">Runtime</p>
             <div class="signal-value">
               <span id="healthDot" class="health-dot"></span>
               <span id="healthText">Checking</span>
             </div>
-            <p class="signal-meta">排序服务、Policy 预检、结算链路由同一 MVP 服务提供。</p>
-          </div>
-          <div class="signal-grid" id="summaryCards"></div>
-        </div>
-      </header>
-
-      <main class="content-grid">
-        <section class="panel panel-wide">
-          <div class="section-head">
-            <div>
-              <p class="section-kicker">Current State</p>
-              <h2>当前系统状态</h2>
-            </div>
-            <p class="section-note">对应 PRD 的 Discovery, Campaign Prep, Opportunity Exchange, Measurement 四段闭环。</p>
+            <p class="detail-section-value">当前用一个服务编排 discovery、policy、settlement、audit，方便团队先把产品闭环打透。</p>
           </div>
           <div id="statusStrip" class="status-strip"></div>
-        </section>
+        </div>
+      </section>
 
-        <section class="panel">
-          <div class="section-head">
-            <div>
-              <p class="section-kicker">Campaign Board</p>
-              <h2>活动看板</h2>
+      <main class="workbench-grid">
+          <section class="panel panel-wide">
+            <div class="panel-header">
+              <div class="panel-header-copy">
+                <p class="panel-kicker">Campaign Operations</p>
+                <h2 class="panel-title">活动推进与优先处理</h2>
+                <p class="panel-note">从首页看活动是否可投放、是否有 policy 风险、以及哪些活动需要马上 review 或 activate。</p>
+              </div>
             </div>
-            <p class="section-note">展示生命周期、policy 决策、结算模型和投放状态。</p>
+            <div class="table-control-bar">
+              <div class="table-control-group">
+                <label><span>Sort</span><select id="campaignSort"><option value="status">status</option><option value="payout_desc">payout desc</option><option value="advertiser">advertiser</option></select></label>
+                <button id="campaignSelectAll" class="button button-subtle">全选</button>
+                <button id="campaignClearSelection" class="button button-subtle">清空</button>
+                <button id="campaignBatchReview" class="button button-subtle">批量 Review</button>
+                <button id="campaignBatchActivate" class="button button-primary">批量 Activate</button>
+              </div>
+              <span id="campaignBatchFeedback" class="table-feedback"></span>
+            </div>
+            <div class="split-layout">
+              <div class="data-table-wrap">
+                <table class="data-table data-table--selectable">
+                  <thead>
+                    <tr>
+                      <th class="selection-cell"></th>
+                      <th>Campaign</th>
+                      <th>Status</th>
+                      <th>Policy</th>
+                    <th>Model</th>
+                    <th>Payout</th>
+                    <th>Category</th>
+                  </tr>
+                </thead>
+                <tbody id="campaignTableBody"></tbody>
+              </table>
+            </div>
+            <aside id="campaignDetail" class="detail-panel"></aside>
           </div>
-          <div id="campaignList" class="stack"></div>
         </section>
 
-        <section class="panel">
-          <div class="section-head">
-            <div>
-              <p class="section-kicker">Partner Surface</p>
-              <h2>合作 Agent</h2>
+        <section class="panel panel-span-6">
+          <div class="panel-header">
+            <div class="panel-header-copy">
+              <p class="panel-kicker">Partner Surface</p>
+              <h2 class="panel-title">合作 Agent 面</h2>
+              <p class="panel-note">用 dense table 快速比较 trust、披露能力和协议完备度。</p>
             </div>
-            <p class="section-note">当前 seed data 已有两个可投放 partner。</p>
           </div>
-          <div id="partnerList" class="stack"></div>
+          <div class="split-layout">
+            <div class="data-table-wrap">
+              <table class="data-table data-table--sticky-first">
+                <thead>
+                  <tr>
+                    <th>Partner</th>
+                    <th>Status</th>
+                    <th>Trust</th>
+                    <th>Disclosure</th>
+                    <th>Auth</th>
+                  </tr>
+                </thead>
+                <tbody id="partnerTableBody"></tbody>
+              </table>
+            </div>
+            <aside id="partnerDetail" class="detail-panel"></aside>
+          </div>
         </section>
 
-        <section class="panel">
-          <div class="section-head">
-            <div>
-              <p class="section-kicker">Create Campaign</p>
-              <h2>创建演示活动</h2>
+          <section class="panel panel-span-6">
+            <div class="panel-header">
+              <div class="panel-header-copy">
+                <p class="panel-kicker">Queue & Settlement</p>
+                <h2 class="panel-title">队列与结算状态</h2>
+              <p class="panel-note">首页只保留高优先级 queue / settlement 视图，深度处置继续交给 DLQ 页面。</p>
             </div>
-            <p class="section-note">提交后会自动触发 Offer 编译和 Policy 预检。</p>
+            <div class="panel-actions">
+                <button id="processRetryQueue" class="button button-primary">处理 Retry Queue</button>
+                <span id="retryQueueResult" class="inline-feedback"></span>
+              </div>
+            </div>
+            <div class="table-control-bar">
+              <div class="table-control-group">
+                <label><span>Sort</span><select id="queueSort"><option value="recent">recent</option><option value="status">status</option><option value="amount_desc">amount desc</option></select></label>
+                <button id="queueSelectAll" class="button button-subtle">全选</button>
+                <button id="queueClearSelection" class="button button-subtle">清空</button>
+                <button id="queueBatchDispute" class="button button-subtle">批量 Dispute</button>
+              </div>
+              <span id="queueBatchFeedback" class="table-feedback"></span>
+            </div>
+            <div class="split-layout">
+              <div class="data-table-wrap">
+                <table class="data-table data-table--selectable">
+                  <thead>
+                    <tr>
+                      <th class="selection-cell"></th>
+                      <th>Settlement</th>
+                      <th>Status</th>
+                      <th>Billing</th>
+                    <th>Amount</th>
+                    <th>Queue</th>
+                  </tr>
+                </thead>
+                <tbody id="queueTableBody"></tbody>
+              </table>
+            </div>
+            <aside id="queueDetail" class="detail-panel"></aside>
+          </div>
+        </section>
+
+          <section class="panel panel-wide">
+            <div class="panel-header">
+              <div class="panel-header-copy">
+                <p class="panel-kicker">Recent Audit</p>
+              <h2 class="panel-title">最近操作轨迹</h2>
+              <p class="panel-note">用 timeline 式 detail 读 trace，用 dense table 扫事件。完整 trace drill-down 仍然保留在独立页面。</p>
+            </div>
+            <div class="panel-actions">
+                <a class="button button-subtle" href="/audit.html">打开 Drill-Down 页面</a>
+              </div>
+            </div>
+            <div class="table-control-bar">
+              <div class="table-control-group">
+                <label><span>Sort</span><select id="auditSort"><option value="recent">recent</option><option value="status">status</option><option value="actor">actor</option></select></label>
+                <button id="auditSelectAll" class="button button-subtle">全选</button>
+                <button id="auditClearSelection" class="button button-subtle">清空</button>
+                <button id="auditCopyTraces" class="button button-subtle">复制选中 Trace</button>
+              </div>
+              <span id="auditBatchFeedback" class="table-feedback"></span>
+            </div>
+            <div class="split-layout">
+              <div class="data-table-wrap">
+                <table class="data-table data-table--selectable">
+                  <thead>
+                    <tr>
+                      <th class="selection-cell"></th>
+                      <th>Action</th>
+                      <th>Trace</th>
+                    <th>Entity</th>
+                    <th>Status</th>
+                    <th>Actor</th>
+                  </tr>
+                </thead>
+                <tbody id="auditTableBody"></tbody>
+              </table>
+            </div>
+            <aside id="auditDetail" class="detail-panel"></aside>
+          </div>
+        </section>
+
+        <section class="panel panel-span-6" id="campaignBuilder">
+          <div class="panel-header">
+            <div class="panel-header-copy">
+              <p class="panel-kicker">Campaign Builder</p>
+              <h2 class="panel-title">创建演示活动</h2>
+              <p class="panel-note">表单结构对齐运营使用习惯：商品、预算、披露、证明分区清楚。</p>
+            </div>
           </div>
           <form id="campaignForm" class="form-grid">
             <label>
@@ -139,13 +276,13 @@
           </form>
         </section>
 
-        <section class="panel" id="opportunityLab">
-          <div class="section-head">
-            <div>
-              <p class="section-kicker">Opportunity Lab</p>
-              <h2>Shortlist 模拟器</h2>
+        <section class="panel panel-span-6" id="opportunityLab">
+          <div class="panel-header">
+            <div class="panel-header-copy">
+              <p class="panel-kicker">Opportunity Lab</p>
+              <h2 class="panel-title">Shortlist 模拟器</h2>
+              <p class="panel-note">保留运营实验台的感觉，但密度、层级和结果表达都更像正式控制台。</p>
             </div>
-            <p class="section-note">这部分直连 `POST /opportunities/evaluate`。</p>
           </div>
           <form id="opportunityForm" class="form-grid">
             <label>
@@ -181,49 +318,6 @@
             </div>
           </form>
           <div id="shortlistResult" class="stack"></div>
-        </section>
-
-        <section class="panel">
-          <div class="section-head">
-            <div>
-              <p class="section-kicker">Settlement View</p>
-              <h2>结算状态</h2>
-            </div>
-            <p class="section-note">回执只负责入队。真正结算由 retry queue 驱动状态机推进。</p>
-          </div>
-          <div class="form-actions">
-            <button id="processRetryQueue" class="button button-primary">处理 Retry Queue</button>
-            <span id="retryQueueResult" class="inline-feedback"></span>
-          </div>
-          <div id="settlementList" class="stack"></div>
-        </section>
-
-        <section class="panel">
-          <div class="section-head">
-            <div>
-              <p class="section-kicker">Retry Queue</p>
-              <h2>重试队列</h2>
-            </div>
-            <p class="section-note">这里展示待处理、重试中或已完成的 settlement retry job。</p>
-          </div>
-          <div class="form-actions">
-            <a class="button button-secondary" href="/dlq.html">打开 DLQ 页面</a>
-          </div>
-          <div id="retryJobList" class="stack"></div>
-        </section>
-
-        <section class="panel">
-          <div class="section-head">
-            <div>
-              <p class="section-kicker">Audit Trail</p>
-              <h2>操作轨迹</h2>
-            </div>
-            <p class="section-note">展示最近的 cache、idempotency、campaign、receipt、settlement 事件。</p>
-          </div>
-          <div class="form-actions">
-            <a class="button button-secondary" href="/audit.html">打开 Drill-Down 页面</a>
-          </div>
-          <div id="auditTrailList" class="stack"></div>
         </section>
       </main>
     </div>

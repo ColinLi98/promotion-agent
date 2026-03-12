@@ -3,35 +3,66 @@ import crypto from "node:crypto";
 import { createAuditEvent } from "./audit.js";
 import { compileOfferCard } from "./compiler.js";
 import {
+  AgentLeadSchema,
+  AppealCaseInputSchema,
+  AppealCaseSchema,
   AuditEventPageSchema,
   AuditEventSchema,
   CampaignDraftInputSchema,
   CampaignSchema,
   DashboardSnapshotSchema,
+  DiscoveryRunSchema,
+  DiscoverySourceInputSchema,
+  DiscoverySourceSchema,
+  EvidenceAssetInputSchema,
+  EvidenceAssetSchema,
   EventReceiptSchema,
+  MeasurementFunnelQuerySchema,
   PolicyCheckResultSchema,
+  ReputationRecordSchema,
+  RiskCaseInputSchema,
+  RiskCaseSchema,
   SettlementDeadLetterEntrySchema,
   SettlementDeadLetterPageSchema,
   SettlementReceiptSchema,
   SettlementRetryJobSchema,
   type AgentLead,
+  type AppealCase,
+  type AppealCaseInput,
   type AuditEvent,
   type AuditEventFilter,
+  type AttributionRow,
   type Campaign,
   type CampaignDraftInput,
   type DashboardSnapshot,
+  type DiscoveryRun,
+  type DiscoverySource,
+  type DiscoverySourceInput,
+  type EvidenceAsset,
+  type EvidenceAssetInput,
   type EvaluationResponse,
   type EventReceipt,
+  type MeasurementFunnel,
+  type MeasurementFunnelQuery,
   type OpportunityRequest,
   type PartnerAgent,
   type PolicyCheckResult,
+  type ReputationRecord,
+  type RiskCase,
+  type RiskCaseInput,
   type SettlementDeadLetterEntry,
   type SettlementDeadLetterFilter,
+  type BillingDraft,
   type SettlementReceipt,
   type SettlementRetryJob,
   type SettlementRetryJobFilter,
+  type VerificationChecklist,
+  type VerificationRecord,
+  VerificationRecordSchema,
 } from "./domain.js";
+import { crawlDiscoverySource } from "./discovery.js";
 import { InMemoryHotStateStore, type HotStateStore } from "./hot-state.js";
+import { buildAttributionRows, buildBillingDrafts, buildMeasurementFunnel } from "./measurement.js";
 import { runPolicyCheck } from "./policy.js";
 import type { PromotionAgentRepository } from "./repository.js";
 import { rankEligibleCampaigns, shortlistCampaigns } from "./ranking.js";
@@ -92,9 +123,16 @@ const receiptLockKey = (receiptId: string) => `lock:receipt:${receiptId}`;
 const retryLeaseKey = (retryJobId: string) => `lock:settlement-retry:${retryJobId}`;
 
 class InMemoryPromotionAgentRepository implements PromotionAgentRepository {
+  private readonly discoverySources: DiscoverySource[];
+  private readonly discoveryRuns: DiscoveryRun[];
   private readonly leads: AgentLead[];
   private readonly partners: PartnerAgent[];
   private readonly campaigns: Campaign[];
+  private readonly verificationRecords: VerificationRecord[];
+  private readonly evidenceAssets: EvidenceAsset[];
+  private readonly riskCases: RiskCase[];
+  private readonly reputationRecords: ReputationRecord[];
+  private readonly appeals: AppealCase[];
   private readonly policyChecks: PolicyCheckResult[];
   private readonly eventReceipts: EventReceipt[];
   private readonly settlements: SettlementReceipt[];
@@ -103,9 +141,16 @@ class InMemoryPromotionAgentRepository implements PromotionAgentRepository {
   private readonly auditEvents: AuditEvent[];
 
   constructor(seedData: SeedData) {
+    this.discoverySources = clone(seedData.discoverySources);
+    this.discoveryRuns = [];
     this.leads = clone(seedData.leads);
     this.partners = clone(seedData.partners);
     this.campaigns = clone(seedData.campaigns);
+    this.verificationRecords = clone(seedData.verificationRecords);
+    this.evidenceAssets = clone(seedData.evidenceAssets);
+    this.riskCases = clone(seedData.riskCases);
+    this.reputationRecords = clone(seedData.reputationRecords);
+    this.appeals = clone(seedData.appeals);
     this.policyChecks = seedData.campaigns.map((campaign) => runPolicyCheck(clone(campaign)));
     this.eventReceipts = [];
     this.settlements = [];
@@ -114,8 +159,101 @@ class InMemoryPromotionAgentRepository implements PromotionAgentRepository {
     this.auditEvents = [];
   }
 
+  async listDiscoverySources() {
+    return clone(this.discoverySources);
+  }
+
+  async createDiscoverySource(input: DiscoverySourceInput) {
+    const parsed = DiscoverySourceSchema.parse({
+      sourceId: `src_${crypto.randomUUID().slice(0, 8)}`,
+      ...DiscoverySourceInputSchema.parse(input),
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    });
+    this.discoverySources.push(clone(parsed));
+    return clone(parsed);
+  }
+
+  async listDiscoveryRuns() {
+    return clone(this.discoveryRuns);
+  }
+
+  async insertDiscoveryRun(run: DiscoveryRun) {
+    this.discoveryRuns.unshift(clone(DiscoveryRunSchema.parse(run)));
+  }
+
+  async updateDiscoveryRun(run: DiscoveryRun) {
+    const parsed = DiscoveryRunSchema.parse(run);
+    const index = this.discoveryRuns.findIndex((item) => item.runId === parsed.runId);
+    if (index < 0) {
+      this.discoveryRuns.unshift(clone(parsed));
+      return;
+    }
+
+    this.discoveryRuns[index] = clone(parsed);
+  }
+
   async listLeads() {
     return clone(this.leads);
+  }
+
+  async getLead(leadId: string) {
+    const lead = this.leads.find((item) => item.agentId === leadId);
+    return lead ? clone(lead) : null;
+  }
+
+  async upsertLead(lead: AgentLead) {
+    const parsed = AgentLeadSchema.parse(lead);
+    const index = this.leads.findIndex((item) => item.agentId === parsed.agentId);
+    if (index < 0) {
+      this.leads.push(clone(parsed));
+      return;
+    }
+
+    this.leads[index] = clone(parsed);
+  }
+
+  async assignLead(leadId: string, ownerId: string) {
+    const lead = this.leads.find((item) => item.agentId === leadId);
+    if (!lead) return null;
+    lead.assignedOwner = ownerId;
+    lead.lastSeenAt = nowIso();
+    return clone(lead);
+  }
+
+  async updateLeadStatus(
+    leadId: string,
+    nextStatus: AgentLead["verificationStatus"],
+    actorId: string,
+    comment: string,
+    checklist: VerificationChecklist,
+  ) {
+    const lead = this.leads.find((item) => item.agentId === leadId);
+    if (!lead) return null;
+    const previousStatus = lead.verificationStatus;
+    lead.verificationStatus = nextStatus;
+    lead.lastSeenAt = nowIso();
+    this.verificationRecords.unshift(
+      VerificationRecordSchema.parse({
+        recordId: `verif_${crypto.randomUUID().slice(0, 8)}`,
+        leadId,
+        previousStatus,
+        nextStatus,
+        checklist,
+        actorId,
+        comment,
+        occurredAt: nowIso(),
+      }),
+    );
+    return clone(lead);
+  }
+
+  async listVerificationRecords(leadId: string) {
+    return clone(this.verificationRecords.filter((item) => item.leadId === leadId));
+  }
+
+  async insertVerificationRecord(record: VerificationRecord) {
+    this.verificationRecords.unshift(clone(VerificationRecordSchema.parse(record)));
   }
 
   async listPartners() {
@@ -141,6 +279,96 @@ class InMemoryPromotionAgentRepository implements PromotionAgentRepository {
     }
 
     this.campaigns.push(clone(parsed));
+  }
+
+  async listEvidenceAssets() {
+    return clone(this.evidenceAssets);
+  }
+
+  async insertEvidenceAsset(asset: EvidenceAsset) {
+    this.evidenceAssets.unshift(clone(EvidenceAssetSchema.parse(asset)));
+  }
+
+  async listRiskCases(filter: Partial<{ status: string; severity: string; entityType: string; ownerId: string; dateFrom: string; dateTo: string; }> = {}) {
+    return clone(
+      this.riskCases.filter((item) => {
+        if (filter.status && item.status !== filter.status) return false;
+        if (filter.severity && item.severity !== filter.severity) return false;
+        if (filter.entityType && item.entityType !== filter.entityType) return false;
+        if (filter.ownerId && item.ownerId !== filter.ownerId) return false;
+        if (filter.dateFrom && new Date(item.openedAt).getTime() < new Date(filter.dateFrom).getTime()) return false;
+        if (filter.dateTo && new Date(item.openedAt).getTime() > new Date(filter.dateTo).getTime()) return false;
+        return true;
+      }),
+    );
+  }
+
+  async getRiskCase(caseId: string) {
+    const riskCase = this.riskCases.find((item) => item.caseId === caseId);
+    return riskCase ? clone(riskCase) : null;
+  }
+
+  async insertRiskCase(riskCase: RiskCase) {
+    this.riskCases.unshift(clone(RiskCaseSchema.parse(riskCase)));
+  }
+
+  async updateRiskCase(riskCase: RiskCase) {
+    const parsed = RiskCaseSchema.parse(riskCase);
+    const index = this.riskCases.findIndex((item) => item.caseId === parsed.caseId);
+    if (index < 0) {
+      this.riskCases.unshift(clone(parsed));
+      return;
+    }
+
+    this.riskCases[index] = clone(parsed);
+  }
+
+  async listReputationRecords() {
+    return clone(this.reputationRecords);
+  }
+
+  async insertReputationRecord(record: ReputationRecord) {
+    this.reputationRecords.unshift(clone(ReputationRecordSchema.parse(record)));
+  }
+
+  async getReputationRecord(recordId: string) {
+    const record = this.reputationRecords.find((item) => item.recordId === recordId);
+    return record ? clone(record) : null;
+  }
+
+  async updateReputationRecord(record: ReputationRecord) {
+    const parsed = ReputationRecordSchema.parse(record);
+    const index = this.reputationRecords.findIndex((item) => item.recordId === parsed.recordId);
+    if (index < 0) {
+      this.reputationRecords.unshift(clone(parsed));
+      return;
+    }
+
+    this.reputationRecords[index] = clone(parsed);
+  }
+
+  async listAppeals() {
+    return clone(this.appeals);
+  }
+
+  async getAppeal(appealId: string) {
+    const appeal = this.appeals.find((item) => item.appealId === appealId);
+    return appeal ? clone(appeal) : null;
+  }
+
+  async insertAppeal(appeal: AppealCase) {
+    this.appeals.unshift(clone(AppealCaseSchema.parse(appeal)));
+  }
+
+  async updateAppeal(appeal: AppealCase) {
+    const parsed = AppealCaseSchema.parse(appeal);
+    const index = this.appeals.findIndex((item) => item.appealId === parsed.appealId);
+    if (index < 0) {
+      this.appeals.unshift(clone(parsed));
+      return;
+    }
+
+    this.appeals[index] = clone(parsed);
   }
 
   async listPolicyChecks(campaignId?: string) {
@@ -171,6 +399,23 @@ class InMemoryPromotionAgentRepository implements PromotionAgentRepository {
 
   async insertEventReceipt(receipt: EventReceipt) {
     this.eventReceipts.push(clone(EventReceiptSchema.parse(receipt)));
+  }
+
+  async getMeasurementFunnel(query: MeasurementFunnelQuery) {
+    return buildMeasurementFunnel(this.eventReceipts, this.campaigns, this.partners, MeasurementFunnelQuerySchema.parse(query));
+  }
+
+  async getAttributionRows(query: MeasurementFunnelQuery) {
+    return buildAttributionRows(
+      this.eventReceipts,
+      this.settlements,
+      this.campaigns,
+      MeasurementFunnelQuerySchema.parse(query),
+    );
+  }
+
+  async getBillingDrafts() {
+    return buildBillingDrafts(this.settlements, this.campaigns);
   }
 
   async listSettlements() {
@@ -340,12 +585,317 @@ export class PromotionAgentStore {
     return this.repository.listLeads();
   }
 
+  async listDiscoverySources() {
+    return this.repository.listDiscoverySources();
+  }
+
+  async createDiscoverySource(input: DiscoverySourceInput) {
+    return this.repository.createDiscoverySource(input);
+  }
+
+  async listDiscoveryRuns() {
+    return this.repository.listDiscoveryRuns();
+  }
+
+  async runDiscovery(sourceId: string) {
+    const source = (await this.repository.listDiscoverySources()).find((item) => item.sourceId === sourceId);
+    if (!source) {
+      return null;
+    }
+
+    const run: DiscoveryRun = DiscoveryRunSchema.parse({
+      runId: `run_${crypto.randomUUID().slice(0, 8)}`,
+      sourceId,
+      status: "running",
+      startedAt: nowIso(),
+      finishedAt: null,
+      discoveredCount: 0,
+      createdLeadCount: 0,
+      dedupedCount: 0,
+      errorCount: 0,
+      traceId: `discovery_${sourceId}_${Date.now()}`,
+      errors: [],
+    });
+    await this.repository.insertDiscoveryRun(run);
+
+    const existingLeads = await this.repository.listLeads();
+    const byDedupe = new Map(existingLeads.map((lead) => [lead.dedupeKey, lead]));
+    const crawled = await crawlDiscoverySource(source);
+
+    run.discoveredCount = crawled.leads.length;
+    for (const lead of crawled.leads) {
+      const existing = byDedupe.get(lead.dedupeKey);
+      if (existing) {
+        const merged: AgentLead = AgentLeadSchema.parse({
+          ...existing,
+          verticals: [...new Set([...existing.verticals, ...lead.verticals])],
+          skills: [...new Set([...existing.skills, ...lead.skills])],
+          geo: [...new Set([...existing.geo, ...lead.geo])],
+          authModes: [...new Set([...existing.authModes, ...lead.authModes])],
+          lastSeenAt: nowIso(),
+          endpointUrl: existing.endpointUrl ?? lead.endpointUrl,
+          contactRef: existing.contactRef ?? lead.contactRef,
+          missingFields: [...new Set([...existing.missingFields, ...lead.missingFields])],
+          reachProxy: Math.max(existing.reachProxy, lead.reachProxy),
+          monetizationReadiness: Math.max(existing.monetizationReadiness, lead.monetizationReadiness),
+          leadScore: Math.max(existing.leadScore, lead.leadScore),
+          scoreBreakdown: {
+            icpFit: Math.max(existing.scoreBreakdown.icpFit, lead.scoreBreakdown.icpFit),
+            protocolFit: Math.max(existing.scoreBreakdown.protocolFit, lead.scoreBreakdown.protocolFit),
+            reachFit: Math.max(existing.scoreBreakdown.reachFit, lead.scoreBreakdown.reachFit),
+          },
+        });
+        await this.repository.upsertLead(merged);
+        run.dedupedCount += 1;
+        continue;
+      }
+
+      await this.repository.upsertLead(lead);
+      run.createdLeadCount += 1;
+      byDedupe.set(lead.dedupeKey, lead);
+    }
+
+    run.status = crawled.errors.length > 0 ? "completed" : "completed";
+    run.finishedAt = nowIso();
+    run.errorCount = crawled.errors.length;
+    run.errors = crawled.errors;
+    await this.repository.updateDiscoveryRun(run);
+    await this.recordAuditEvent(
+      createAuditEvent({
+        traceId: run.traceId,
+        entityType: "opportunity",
+        entityId: run.runId,
+        action: "run_discovery_source",
+        status: crawled.errors.length > 0 ? "blocked" : "success",
+        actorType: "system",
+        details: {
+          sourceId,
+          discoveredCount: run.discoveredCount,
+          createdLeadCount: run.createdLeadCount,
+          dedupedCount: run.dedupedCount,
+          errorCount: run.errorCount,
+        },
+      }),
+    );
+
+    return run;
+  }
+
   async listPartners() {
     return this.repository.listPartners();
   }
 
   async listCampaigns() {
     return this.repository.listCampaigns();
+  }
+
+  async listAgentLeads(filters: Partial<{ status: string; sourceType: string; dataOrigin: string; vertical: string; geo: string; owner: string; hasMissingFields: boolean; }>) {
+    const leads = await this.repository.listLeads();
+    return leads.filter((lead) => {
+      if (filters.status && lead.verificationStatus !== filters.status) return false;
+      if (filters.sourceType && lead.sourceType !== filters.sourceType) return false;
+      if (filters.dataOrigin && lead.dataOrigin !== filters.dataOrigin) return false;
+      if (filters.vertical && !lead.verticals.includes(filters.vertical)) return false;
+      if (filters.geo && !lead.geo.includes(filters.geo)) return false;
+      if (filters.owner && lead.assignedOwner !== filters.owner) return false;
+      if (typeof filters.hasMissingFields === "boolean" && (lead.missingFields.length > 0) !== filters.hasMissingFields) return false;
+      return true;
+    });
+  }
+
+  async getLead(leadId: string) {
+    return this.repository.getLead(leadId);
+  }
+
+  async assignLead(leadId: string, ownerId: string) {
+    const lead = await this.repository.assignLead(leadId, ownerId);
+    if (!lead) return null;
+    await this.recordAuditEvent(
+      createAuditEvent({
+        traceId: leadId,
+        entityType: "campaign",
+        entityId: leadId,
+        action: "assign_agent_lead",
+        status: "success",
+        actorType: "operator",
+        actorId: ownerId,
+        details: {
+          ownerId,
+        },
+      }),
+    );
+    return lead;
+  }
+
+  async updateLeadStatus(
+    leadId: string,
+    nextStatus: AgentLead["verificationStatus"],
+    actorId: string,
+    comment: string,
+    checklist: VerificationChecklist,
+  ) {
+    if (
+      nextStatus === "active" &&
+      !Object.values(checklist).every(Boolean)
+    ) {
+      return {
+        ok: false as const,
+        message: "Checklist must be complete before activating a lead.",
+      };
+    }
+
+    const lead = await this.repository.updateLeadStatus(leadId, nextStatus, actorId, comment, checklist);
+    if (!lead) {
+      return null;
+    }
+
+    await this.recordAuditEvent(
+      createAuditEvent({
+        traceId: leadId,
+        entityType: "campaign",
+        entityId: leadId,
+        action: "update_agent_lead_status",
+        status: "success",
+        actorType: "operator",
+        actorId,
+        details: {
+          nextStatus,
+          checklist,
+          comment,
+        },
+      }),
+    );
+
+    return {
+      ok: true as const,
+      lead,
+    };
+  }
+
+  async listVerificationHistory(leadId: string) {
+    return this.repository.listVerificationRecords(leadId);
+  }
+
+  async listEvidenceAssets() {
+    return this.repository.listEvidenceAssets();
+  }
+
+  async createEvidenceAsset(input: EvidenceAssetInput) {
+    const parsed = EvidenceAssetInputSchema.parse(input);
+    const asset = EvidenceAssetSchema.parse({
+      assetId: `asset_${crypto.randomUUID().slice(0, 8)}`,
+      ...parsed,
+      updatedAt: nowIso(),
+      verifiedBy: parsed.verifiedBy ?? null,
+      verificationNote: parsed.verificationNote ?? null,
+    });
+    await this.repository.insertEvidenceAsset(asset);
+    return asset;
+  }
+
+  async listRiskCases(filter: Partial<{ status: string; severity: string; entityType: string; ownerId: string; dateFrom: string; dateTo: string; }> = {}) {
+    return this.repository.listRiskCases(filter);
+  }
+
+  async createRiskCase(input: RiskCaseInput) {
+    const parsed = RiskCaseInputSchema.parse(input);
+    const riskCase = RiskCaseSchema.parse({
+      caseId: `risk_${crypto.randomUUID().slice(0, 8)}`,
+      ...parsed,
+      status: "open",
+      openedAt: nowIso(),
+      resolvedAt: null,
+      ownerId: parsed.ownerId ?? null,
+      note: parsed.note ?? null,
+    });
+    await this.repository.insertRiskCase(riskCase);
+    if (parsed.entityType === "partner") {
+      await this.repository.insertReputationRecord(
+        ReputationRecordSchema.parse({
+          recordId: `rep_${crypto.randomUUID().slice(0, 8)}`,
+          partnerId: parsed.entityId,
+          delta: parsed.severity === "critical" ? -8 : parsed.severity === "high" ? -5 : -2,
+          reasonType:
+            parsed.reasonType === "policy_violation" ? "manual_adjustment" : parsed.reasonType,
+          evidenceRefs: [riskCase.caseId],
+          disputeStatus: "none",
+          occurredAt: nowIso(),
+        }),
+      );
+    }
+    return riskCase;
+  }
+
+  async updateRiskCaseStatus(caseId: string, status: RiskCase["status"], ownerId?: string, note?: string) {
+    const riskCase = await this.repository.getRiskCase(caseId);
+    if (!riskCase) return null;
+    riskCase.status = status;
+    riskCase.ownerId = ownerId ?? riskCase.ownerId;
+    riskCase.note = note ?? riskCase.note;
+    riskCase.resolvedAt = status === "resolved" || status === "dismissed" ? nowIso() : null;
+    await this.repository.updateRiskCase(riskCase);
+    return riskCase;
+  }
+
+  async listReputationRecords() {
+    return this.repository.listReputationRecords();
+  }
+
+  async listAppeals() {
+    return this.repository.listAppeals();
+  }
+
+  async createAppeal(input: AppealCaseInput) {
+    const parsed = AppealCaseInputSchema.parse(input);
+    const appeal = AppealCaseSchema.parse({
+      appealId: `appeal_${crypto.randomUUID().slice(0, 8)}`,
+      ...parsed,
+      status: "open",
+      openedAt: nowIso(),
+      decidedAt: null,
+      decisionNote: null,
+    });
+    await this.repository.insertAppeal(appeal);
+
+    const records = await this.repository.listReputationRecords();
+    const target = records.find((item) => item.recordId === parsed.targetRecordId);
+    if (target) {
+      await this.repository.updateReputationRecord(
+        ReputationRecordSchema.parse({
+          ...target,
+          disputeStatus: "under_review",
+        }),
+      );
+    }
+    return appeal;
+  }
+
+  async decideAppeal(appealId: string, status: AppealCase["status"], decisionNote: string) {
+    const appeal = await this.repository.getAppeal(appealId);
+    if (!appeal) return null;
+    appeal.status = status;
+    appeal.decisionNote = decisionNote;
+    appeal.decidedAt = nowIso();
+    await this.repository.updateAppeal(appeal);
+
+    const target = await this.repository.getReputationRecord(appeal.targetRecordId);
+    if (target) {
+      target.disputeStatus = status === "approved" ? "resolved" : "overturned";
+      await this.repository.updateReputationRecord(target);
+    }
+    return appeal;
+  }
+
+  async getMeasurementFunnel(query: MeasurementFunnelQuery) {
+    return this.repository.getMeasurementFunnel(query);
+  }
+
+  async getAttributionRows(query: MeasurementFunnelQuery) {
+    return this.repository.getAttributionRows(query);
+  }
+
+  async getBillingDrafts() {
+    return this.repository.getBillingDrafts();
   }
 
   async getCampaign(campaignId: string) {
@@ -1099,11 +1649,12 @@ export class PromotionAgentStore {
   }
 
   async dashboard(): Promise<DashboardSnapshot> {
-    const [partners, campaigns, receipts, settlements] = await Promise.all([
+    const [partners, campaigns, receipts, settlements, leads] = await Promise.all([
       this.repository.listPartners(),
       this.repository.listCampaigns(),
       this.repository.listEventReceipts(),
       this.repository.listSettlements(),
+      this.repository.listLeads(),
     ]);
 
     const eventCounts = {
@@ -1124,6 +1675,14 @@ export class PromotionAgentStore {
         .filter((currentReceipt) => currentReceipt.eventType === "shortlisted")
         .map((currentReceipt) => currentReceipt.intentId),
     ).size;
+    const shownCount = eventCounts.shown;
+    const detailViewCount = eventCounts.detail_view;
+    const handoffCount = eventCounts.handoff;
+    const conversionCount = eventCounts.conversion;
+    const detailViewRate = shownCount > 0 ? detailViewCount / shownCount : 0;
+    const handoffRate = detailViewCount > 0 ? handoffCount / detailViewCount : 0;
+    const actionConversionRate = handoffCount > 0 ? conversionCount / handoffCount : 0;
+    const disclosureShownRate = eventCounts.shortlisted > 0 ? shownCount / eventCounts.shortlisted : 0;
     const qualifiedRecommendationRate = qualifiedShortlistedIntentCount / opportunityCount;
 
     return DashboardSnapshotSchema.parse({
@@ -1132,6 +1691,11 @@ export class PromotionAgentStore {
       eventCounts,
       settlementCount: settlements.length,
       qualifiedRecommendationRate,
+      detailViewRate,
+      handoffRate,
+      actionConversionRate,
+      disclosureShownRate,
+      qualifiedAgentCoverage: leads.filter((lead) => lead.verificationStatus === "active").length,
     });
   }
 

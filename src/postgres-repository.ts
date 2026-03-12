@@ -6,31 +6,55 @@ import { Pool } from "pg";
 
 import {
   AgentLeadSchema,
+  AppealCaseSchema,
   AuditEventSchema,
   AuditEventPageSchema,
   CampaignSchema,
+  DiscoveryRunSchema,
+  DiscoverySourceInputSchema,
+  DiscoverySourceSchema,
+  EvidenceAssetSchema,
   EventReceiptSchema,
+  MeasurementFunnelQuerySchema,
+  MeasurementFunnelSchema,
   PartnerAgentSchema,
   PolicyCheckResultSchema,
+  ReputationRecordSchema,
+  RiskCaseSchema,
   SettlementDeadLetterEntrySchema,
   SettlementDeadLetterPageSchema,
   SettlementReceiptSchema,
   SettlementRetryJobSchema,
   type AgentLead,
+  type AppealCase,
   type AuditEvent,
   type AuditEventFilter,
   type AuditEventPage,
   type Campaign,
+  type DiscoveryRun,
+  type DiscoverySource,
+  type DiscoverySourceInput,
+  type EvidenceAsset,
   type EventReceipt,
+  type MeasurementFunnel,
+  type MeasurementFunnelQuery,
   type PartnerAgent,
   type PolicyCheckResult,
+  type ReputationRecord,
+  type RiskCase,
   type SettlementDeadLetterEntry,
   type SettlementDeadLetterFilter,
   type SettlementDeadLetterPage,
   type SettlementReceipt,
   type SettlementRetryJob,
   type SettlementRetryJobFilter,
+  type VerificationChecklist,
+  type VerificationRecord,
+  VerificationRecordSchema,
+  type AttributionRow,
+  type BillingDraft,
 } from "./domain.js";
+import { buildAttributionRows, buildBillingDrafts, buildMeasurementFunnel } from "./measurement.js";
 import { runPolicyCheck } from "./policy.js";
 import type { PromotionAgentRepository } from "./repository.js";
 import type { SeedData } from "./seed.js";
@@ -55,10 +79,145 @@ export class PostgresPromotionAgentRepository implements PromotionAgentRepositor
     return repository;
   }
 
+  async listDiscoverySources() {
+    const result = await this.pool.query(`
+      SELECT source_id, source_type, name, base_url, seed_urls, active, crawl_policy, vertical_hints, geo_hints, created_at, updated_at
+      FROM discovery_sources
+      ORDER BY created_at DESC
+    `);
+
+    return result.rows.map((row) =>
+      DiscoverySourceSchema.parse({
+        sourceId: row.source_id,
+        sourceType: row.source_type,
+        name: row.name,
+        baseUrl: row.base_url,
+        seedUrls: row.seed_urls,
+        active: row.active,
+        crawlPolicy: row.crawl_policy,
+        verticalHints: row.vertical_hints,
+        geoHints: row.geo_hints,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }),
+    );
+  }
+
+  async createDiscoverySource(input: DiscoverySourceInput) {
+    const parsed = DiscoverySourceInputSchema.parse(input);
+    const source = DiscoverySourceSchema.parse({
+      sourceId: `src_${Math.random().toString(36).slice(2, 10)}`,
+      ...parsed,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    await this.pool.query(
+      `
+        INSERT INTO discovery_sources (
+          source_id, source_type, name, base_url, seed_urls, active, crawl_policy, vertical_hints, geo_hints, created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5::jsonb, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, $11
+        )
+      `,
+      [
+        source.sourceId,
+        source.sourceType,
+        source.name,
+        source.baseUrl,
+        toJson(source.seedUrls),
+        source.active,
+        toJson(source.crawlPolicy),
+        toJson(source.verticalHints),
+        toJson(source.geoHints),
+        source.createdAt,
+        source.updatedAt,
+      ],
+    );
+    return source;
+  }
+
+  async listDiscoveryRuns() {
+    const result = await this.pool.query(`
+      SELECT run_id, source_id, status, started_at, finished_at, discovered_count, created_lead_count, deduped_count, error_count, trace_id, errors
+      FROM discovery_runs
+      ORDER BY started_at DESC
+    `);
+
+    return result.rows.map((row) =>
+      DiscoveryRunSchema.parse({
+        runId: row.run_id,
+        sourceId: row.source_id,
+        status: row.status,
+        startedAt: row.started_at,
+        finishedAt: row.finished_at,
+        discoveredCount: row.discovered_count,
+        createdLeadCount: row.created_lead_count,
+        dedupedCount: row.deduped_count,
+        errorCount: row.error_count,
+        traceId: row.trace_id,
+        errors: row.errors,
+      }),
+    );
+  }
+
+  async insertDiscoveryRun(run: DiscoveryRun) {
+    const parsed = DiscoveryRunSchema.parse(run);
+    await this.pool.query(
+      `
+        INSERT INTO discovery_runs (
+          run_id, source_id, status, started_at, finished_at, discovered_count, created_lead_count, deduped_count, error_count, trace_id, errors
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb
+        )
+      `,
+      [
+        parsed.runId,
+        parsed.sourceId,
+        parsed.status,
+        parsed.startedAt,
+        parsed.finishedAt,
+        parsed.discoveredCount,
+        parsed.createdLeadCount,
+        parsed.dedupedCount,
+        parsed.errorCount,
+        parsed.traceId,
+        toJson(parsed.errors),
+      ],
+    );
+  }
+
+  async updateDiscoveryRun(run: DiscoveryRun) {
+    const parsed = DiscoveryRunSchema.parse(run);
+    await this.pool.query(
+      `
+        UPDATE discovery_runs
+        SET status = $2,
+            finished_at = $3,
+            discovered_count = $4,
+            created_lead_count = $5,
+            deduped_count = $6,
+            error_count = $7,
+            errors = $8::jsonb
+        WHERE run_id = $1
+      `,
+      [
+        parsed.runId,
+        parsed.status,
+        parsed.finishedAt,
+        parsed.discoveredCount,
+        parsed.createdLeadCount,
+        parsed.dedupedCount,
+        parsed.errorCount,
+        toJson(parsed.errors),
+      ],
+    );
+  }
+
   async listLeads() {
     const result = await this.pool.query(`
-      SELECT agent_id, source, provider_org, card_url, verticals, skills, geo, auth_modes, accepts_sponsored,
-             supports_disclosure, trust_seed, lead_score
+      SELECT agent_id, data_origin, source, source_type, source_ref, provider_org, card_url, verticals, skills, geo, auth_modes, accepts_sponsored,
+             supports_disclosure, trust_seed, lead_score, discovered_at, last_seen_at, endpoint_url, contact_ref,
+             missing_fields, reach_proxy, monetization_readiness, verification_status, assigned_owner, notes, dedupe_key, score_breakdown
       FROM agent_leads
       ORDER BY provider_org ASC
     `);
@@ -66,7 +225,10 @@ export class PostgresPromotionAgentRepository implements PromotionAgentRepositor
     return result.rows.map((row) =>
       AgentLeadSchema.parse({
         agentId: row.agent_id,
+        dataOrigin: row.data_origin,
         source: row.source,
+        sourceType: row.source_type,
+        sourceRef: row.source_ref,
         providerOrg: row.provider_org,
         cardUrl: row.card_url,
         verticals: row.verticals,
@@ -77,7 +239,233 @@ export class PostgresPromotionAgentRepository implements PromotionAgentRepositor
         supportsDisclosure: row.supports_disclosure,
         trustSeed: row.trust_seed,
         leadScore: row.lead_score,
+        discoveredAt: row.discovered_at,
+        lastSeenAt: row.last_seen_at,
+        endpointUrl: row.endpoint_url,
+        contactRef: row.contact_ref,
+        missingFields: row.missing_fields,
+        reachProxy: row.reach_proxy,
+        monetizationReadiness: row.monetization_readiness,
+        verificationStatus: row.verification_status,
+        assignedOwner: row.assigned_owner,
+        notes: row.notes,
+        dedupeKey: row.dedupe_key,
+        scoreBreakdown: row.score_breakdown,
       }),
+    );
+  }
+
+  async getLead(leadId: string) {
+    const result = await this.pool.query(
+      `
+        SELECT agent_id, data_origin, source, source_type, source_ref, provider_org, card_url, verticals, skills, geo, auth_modes, accepts_sponsored,
+               supports_disclosure, trust_seed, lead_score, discovered_at, last_seen_at, endpoint_url, contact_ref,
+               missing_fields, reach_proxy, monetization_readiness, verification_status, assigned_owner, notes, dedupe_key, score_breakdown
+        FROM agent_leads
+        WHERE agent_id = $1
+      `,
+      [leadId],
+    );
+
+    return result.rows[0]
+      ? AgentLeadSchema.parse({
+          agentId: result.rows[0].agent_id,
+          dataOrigin: result.rows[0].data_origin,
+          source: result.rows[0].source,
+          sourceType: result.rows[0].source_type,
+          sourceRef: result.rows[0].source_ref,
+          providerOrg: result.rows[0].provider_org,
+          cardUrl: result.rows[0].card_url,
+          verticals: result.rows[0].verticals,
+          skills: result.rows[0].skills,
+          geo: result.rows[0].geo,
+          authModes: result.rows[0].auth_modes,
+          acceptsSponsored: result.rows[0].accepts_sponsored,
+          supportsDisclosure: result.rows[0].supports_disclosure,
+          trustSeed: result.rows[0].trust_seed,
+          leadScore: result.rows[0].lead_score,
+          discoveredAt: result.rows[0].discovered_at,
+          lastSeenAt: result.rows[0].last_seen_at,
+          endpointUrl: result.rows[0].endpoint_url,
+          contactRef: result.rows[0].contact_ref,
+          missingFields: result.rows[0].missing_fields,
+          reachProxy: result.rows[0].reach_proxy,
+          monetizationReadiness: result.rows[0].monetization_readiness,
+          verificationStatus: result.rows[0].verification_status,
+          assignedOwner: result.rows[0].assigned_owner,
+          notes: result.rows[0].notes,
+          dedupeKey: result.rows[0].dedupe_key,
+          scoreBreakdown: result.rows[0].score_breakdown,
+        })
+      : null;
+  }
+
+  async upsertLead(lead: AgentLead) {
+    const parsed = AgentLeadSchema.parse(lead);
+    await this.pool.query(
+      `
+        INSERT INTO agent_leads (
+          agent_id, data_origin, source, source_type, source_ref, provider_org, card_url, verticals, skills, geo, auth_modes, accepts_sponsored,
+          supports_disclosure, trust_seed, lead_score, discovered_at, last_seen_at, endpoint_url, contact_ref, missing_fields,
+          reach_proxy, monetization_readiness, verification_status, assigned_owner, notes, dedupe_key, score_breakdown, created_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, $12, $13, $14, $15, $16, $17, $18, $19,
+          $20::jsonb, $21, $22, $23, $24, $25, $26, $27::jsonb, $28
+        )
+        ON CONFLICT (agent_id) DO UPDATE SET
+          data_origin = EXCLUDED.data_origin,
+          source = EXCLUDED.source,
+          source_type = EXCLUDED.source_type,
+          source_ref = EXCLUDED.source_ref,
+          provider_org = EXCLUDED.provider_org,
+          card_url = EXCLUDED.card_url,
+          verticals = EXCLUDED.verticals,
+          skills = EXCLUDED.skills,
+          geo = EXCLUDED.geo,
+          auth_modes = EXCLUDED.auth_modes,
+          accepts_sponsored = EXCLUDED.accepts_sponsored,
+          supports_disclosure = EXCLUDED.supports_disclosure,
+          trust_seed = EXCLUDED.trust_seed,
+          lead_score = EXCLUDED.lead_score,
+          discovered_at = EXCLUDED.discovered_at,
+          last_seen_at = EXCLUDED.last_seen_at,
+          endpoint_url = EXCLUDED.endpoint_url,
+          contact_ref = EXCLUDED.contact_ref,
+          missing_fields = EXCLUDED.missing_fields,
+          reach_proxy = EXCLUDED.reach_proxy,
+          monetization_readiness = EXCLUDED.monetization_readiness,
+          verification_status = EXCLUDED.verification_status,
+          assigned_owner = EXCLUDED.assigned_owner,
+          notes = EXCLUDED.notes,
+          dedupe_key = EXCLUDED.dedupe_key,
+          score_breakdown = EXCLUDED.score_breakdown
+      `,
+      [
+        parsed.agentId,
+        parsed.dataOrigin,
+        parsed.source,
+        parsed.sourceType,
+        parsed.sourceRef,
+        parsed.providerOrg,
+        parsed.cardUrl,
+        toJson(parsed.verticals),
+        toJson(parsed.skills),
+        toJson(parsed.geo),
+        toJson(parsed.authModes),
+        parsed.acceptsSponsored,
+        parsed.supportsDisclosure,
+        parsed.trustSeed,
+        parsed.leadScore,
+        parsed.discoveredAt,
+        parsed.lastSeenAt,
+        parsed.endpointUrl,
+        parsed.contactRef,
+        toJson(parsed.missingFields),
+        parsed.reachProxy,
+        parsed.monetizationReadiness,
+        parsed.verificationStatus,
+        parsed.assignedOwner,
+        parsed.notes,
+        parsed.dedupeKey,
+        toJson(parsed.scoreBreakdown),
+        parsed.discoveredAt,
+      ],
+    );
+  }
+
+  async assignLead(leadId: string, ownerId: string) {
+    await this.pool.query(
+      `
+        UPDATE agent_leads
+        SET assigned_owner = $2,
+            last_seen_at = $3
+        WHERE agent_id = $1
+      `,
+      [leadId, ownerId, new Date().toISOString()],
+    );
+    return this.getLead(leadId);
+  }
+
+  async updateLeadStatus(leadId: string, nextStatus: AgentLead["verificationStatus"], actorId: string, comment: string, checklist: VerificationChecklist) {
+    const lead = await this.getLead(leadId);
+    if (!lead) return null;
+    const previousStatus = lead.verificationStatus;
+    await this.pool.query(
+      `
+        UPDATE agent_leads
+        SET verification_status = $2,
+            last_seen_at = $3
+        WHERE agent_id = $1
+      `,
+      [leadId, nextStatus, new Date().toISOString()],
+    );
+    await this.insertVerificationRecord(
+      VerificationRecordSchema.parse({
+        recordId: `verif_${Math.random().toString(36).slice(2, 10)}`,
+        leadId,
+        previousStatus,
+        nextStatus,
+        checklist,
+        actorId,
+        comment,
+        occurredAt: new Date().toISOString(),
+      }),
+    );
+    return this.getLead(leadId);
+  }
+
+  async listVerificationRecords(leadId: string) {
+    const result = await this.pool.query(
+      `
+        SELECT record_id, lead_id, previous_status, next_status, checklist, actor_id, comment, occurred_at
+        FROM verification_records
+        WHERE lead_id = $1
+        ORDER BY occurred_at DESC
+      `,
+      [leadId],
+    );
+
+    return result.rows.map((row) =>
+      VerificationRecordSchema.parse({
+        recordId: row.record_id,
+        leadId: row.lead_id,
+        previousStatus: row.previous_status,
+        nextStatus: row.next_status,
+        checklist: row.checklist,
+        actorId: row.actor_id,
+        comment: row.comment,
+        occurredAt: row.occurred_at,
+      }),
+    );
+  }
+
+  async insertVerificationRecord(record: VerificationRecord) {
+    const parsed = VerificationRecordSchema.parse(record);
+    await this.pool.query(
+      `
+        INSERT INTO verification_records (
+          record_id, lead_id, previous_status, next_status, checklist, actor_id, comment, occurred_at
+        ) VALUES (
+          $1, $2, $3, $4, $5::jsonb, $6, $7, $8
+        )
+        ON CONFLICT (record_id) DO UPDATE SET
+          previous_status = EXCLUDED.previous_status,
+          next_status = EXCLUDED.next_status,
+          checklist = EXCLUDED.checklist,
+          actor_id = EXCLUDED.actor_id,
+          comment = EXCLUDED.comment,
+          occurred_at = EXCLUDED.occurred_at
+      `,
+      [
+        parsed.recordId,
+        parsed.leadId,
+        parsed.previousStatus,
+        parsed.nextStatus,
+        toJson(parsed.checklist),
+        parsed.actorId,
+        parsed.comment,
+        parsed.occurredAt,
+      ],
     );
   }
 
@@ -179,6 +567,367 @@ export class PostgresPromotionAgentRepository implements PromotionAgentRepositor
     );
   }
 
+  async listEvidenceAssets() {
+    const result = await this.pool.query(`
+      SELECT asset_id, campaign_id, type, label, url, updated_at, verified_by, verification_note
+      FROM evidence_assets
+      ORDER BY updated_at DESC
+    `);
+
+    return result.rows.map((row) =>
+      EvidenceAssetSchema.parse({
+        assetId: row.asset_id,
+        campaignId: row.campaign_id,
+        type: row.type,
+        label: row.label,
+        url: row.url,
+        updatedAt: row.updated_at,
+        verifiedBy: row.verified_by,
+        verificationNote: row.verification_note,
+      }),
+    );
+  }
+
+  async insertEvidenceAsset(asset: EvidenceAsset) {
+    const parsed = EvidenceAssetSchema.parse(asset);
+    await this.pool.query(
+      `
+        INSERT INTO evidence_assets (
+          asset_id, campaign_id, type, label, url, updated_at, verified_by, verification_note
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8
+        )
+        ON CONFLICT (asset_id) DO UPDATE SET
+          campaign_id = EXCLUDED.campaign_id,
+          type = EXCLUDED.type,
+          label = EXCLUDED.label,
+          url = EXCLUDED.url,
+          updated_at = EXCLUDED.updated_at,
+          verified_by = EXCLUDED.verified_by,
+          verification_note = EXCLUDED.verification_note
+      `,
+      [
+        parsed.assetId,
+        parsed.campaignId,
+        parsed.type,
+        parsed.label,
+        parsed.url,
+        parsed.updatedAt,
+        parsed.verifiedBy,
+        parsed.verificationNote,
+      ],
+    );
+  }
+
+  async listRiskCases(filter: Partial<{ status: string; severity: string; entityType: string; ownerId: string; dateFrom: string; dateTo: string; }> = {}) {
+    const conditions: string[] = [];
+    const values: unknown[] = [];
+
+    if (filter.status) {
+      values.push(filter.status);
+      conditions.push(`status = $${values.length}`);
+    }
+    if (filter.severity) {
+      values.push(filter.severity);
+      conditions.push(`severity = $${values.length}`);
+    }
+    if (filter.entityType) {
+      values.push(filter.entityType);
+      conditions.push(`entity_type = $${values.length}`);
+    }
+    if (filter.ownerId) {
+      values.push(filter.ownerId);
+      conditions.push(`owner_id = $${values.length}`);
+    }
+    if (filter.dateFrom) {
+      values.push(filter.dateFrom);
+      conditions.push(`opened_at >= $${values.length}`);
+    }
+    if (filter.dateTo) {
+      values.push(filter.dateTo);
+      conditions.push(`opened_at <= $${values.length}`);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const result = await this.pool.query(`
+      SELECT case_id, entity_type, entity_id, reason_type, severity, status, opened_at, resolved_at, owner_id, note
+      FROM risk_cases
+      ${whereClause}
+      ORDER BY opened_at DESC
+    `, values);
+
+    return result.rows.map((row) =>
+      RiskCaseSchema.parse({
+        caseId: row.case_id,
+        entityType: row.entity_type,
+        entityId: row.entity_id,
+        reasonType: row.reason_type,
+        severity: row.severity,
+        status: row.status,
+        openedAt: row.opened_at,
+        resolvedAt: row.resolved_at,
+        ownerId: row.owner_id,
+        note: row.note,
+      }),
+    );
+  }
+
+  async getRiskCase(caseId: string) {
+    const result = await this.pool.query(
+      `
+        SELECT case_id, entity_type, entity_id, reason_type, severity, status, opened_at, resolved_at, owner_id, note
+        FROM risk_cases
+        WHERE case_id = $1
+      `,
+      [caseId],
+    );
+
+    return result.rows[0]
+      ? RiskCaseSchema.parse({
+          caseId: result.rows[0].case_id,
+          entityType: result.rows[0].entity_type,
+          entityId: result.rows[0].entity_id,
+          reasonType: result.rows[0].reason_type,
+          severity: result.rows[0].severity,
+          status: result.rows[0].status,
+          openedAt: result.rows[0].opened_at,
+          resolvedAt: result.rows[0].resolved_at,
+          ownerId: result.rows[0].owner_id,
+          note: result.rows[0].note,
+        })
+      : null;
+  }
+
+  async insertRiskCase(riskCase: RiskCase) {
+    const parsed = RiskCaseSchema.parse(riskCase);
+    await this.pool.query(
+      `
+        INSERT INTO risk_cases (
+          case_id, entity_type, entity_id, reason_type, severity, status, opened_at, resolved_at, owner_id, note
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+        )
+        ON CONFLICT (case_id) DO UPDATE SET
+          status = EXCLUDED.status,
+          resolved_at = EXCLUDED.resolved_at,
+          owner_id = EXCLUDED.owner_id,
+          note = EXCLUDED.note
+      `,
+      [
+        parsed.caseId,
+        parsed.entityType,
+        parsed.entityId,
+        parsed.reasonType,
+        parsed.severity,
+        parsed.status,
+        parsed.openedAt,
+        parsed.resolvedAt,
+        parsed.ownerId,
+        parsed.note,
+      ],
+    );
+  }
+
+  async updateRiskCase(riskCase: RiskCase) {
+    const parsed = RiskCaseSchema.parse(riskCase);
+    await this.pool.query(
+      `
+        UPDATE risk_cases
+        SET status = $2,
+            resolved_at = $3,
+            owner_id = $4,
+            note = $5
+        WHERE case_id = $1
+      `,
+      [
+        parsed.caseId,
+        parsed.status,
+        parsed.resolvedAt,
+        parsed.ownerId,
+        parsed.note,
+      ],
+    );
+  }
+
+  async listReputationRecords() {
+    const result = await this.pool.query(`
+      SELECT record_id, partner_id, delta, reason_type, evidence_refs, dispute_status, occurred_at
+      FROM reputation_records
+      ORDER BY occurred_at DESC
+    `);
+
+    return result.rows.map((row) =>
+      ReputationRecordSchema.parse({
+        recordId: row.record_id,
+        partnerId: row.partner_id,
+        delta: row.delta,
+        reasonType: row.reason_type,
+        evidenceRefs: row.evidence_refs,
+        disputeStatus: row.dispute_status,
+        occurredAt: row.occurred_at,
+      }),
+    );
+  }
+
+  async getReputationRecord(recordId: string) {
+    const result = await this.pool.query(
+      `
+        SELECT record_id, partner_id, delta, reason_type, evidence_refs, dispute_status, occurred_at
+        FROM reputation_records
+        WHERE record_id = $1
+      `,
+      [recordId],
+    );
+
+    return result.rows[0]
+      ? ReputationRecordSchema.parse({
+          recordId: result.rows[0].record_id,
+          partnerId: result.rows[0].partner_id,
+          delta: result.rows[0].delta,
+          reasonType: result.rows[0].reason_type,
+          evidenceRefs: result.rows[0].evidence_refs,
+          disputeStatus: result.rows[0].dispute_status,
+          occurredAt: result.rows[0].occurred_at,
+        })
+      : null;
+  }
+
+  async insertReputationRecord(record: ReputationRecord) {
+    const parsed = ReputationRecordSchema.parse(record);
+    await this.pool.query(
+      `
+        INSERT INTO reputation_records (
+          record_id, partner_id, delta, reason_type, evidence_refs, dispute_status, occurred_at
+        ) VALUES (
+          $1, $2, $3, $4, $5::jsonb, $6, $7
+        )
+        ON CONFLICT (record_id) DO UPDATE SET
+          delta = EXCLUDED.delta,
+          reason_type = EXCLUDED.reason_type,
+          evidence_refs = EXCLUDED.evidence_refs,
+          dispute_status = EXCLUDED.dispute_status,
+          occurred_at = EXCLUDED.occurred_at
+      `,
+      [
+        parsed.recordId,
+        parsed.partnerId,
+        parsed.delta,
+        parsed.reasonType,
+        toJson(parsed.evidenceRefs),
+        parsed.disputeStatus,
+        parsed.occurredAt,
+      ],
+    );
+  }
+
+  async updateReputationRecord(record: ReputationRecord) {
+    const parsed = ReputationRecordSchema.parse(record);
+    await this.pool.query(
+      `
+        UPDATE reputation_records
+        SET dispute_status = $2,
+            evidence_refs = $3::jsonb
+        WHERE record_id = $1
+      `,
+      [
+        parsed.recordId,
+        parsed.disputeStatus,
+        toJson(parsed.evidenceRefs),
+      ],
+    );
+  }
+
+  async listAppeals() {
+    const result = await this.pool.query(`
+      SELECT appeal_id, partner_id, target_record_id, status, statement, opened_at, decided_at, decision_note
+      FROM appeal_cases
+      ORDER BY opened_at DESC
+    `);
+
+    return result.rows.map((row) =>
+      AppealCaseSchema.parse({
+        appealId: row.appeal_id,
+        partnerId: row.partner_id,
+        targetRecordId: row.target_record_id,
+        status: row.status,
+        statement: row.statement,
+        openedAt: row.opened_at,
+        decidedAt: row.decided_at,
+        decisionNote: row.decision_note,
+      }),
+    );
+  }
+
+  async getAppeal(appealId: string) {
+    const result = await this.pool.query(
+      `
+        SELECT appeal_id, partner_id, target_record_id, status, statement, opened_at, decided_at, decision_note
+        FROM appeal_cases
+        WHERE appeal_id = $1
+      `,
+      [appealId],
+    );
+
+    return result.rows[0]
+      ? AppealCaseSchema.parse({
+          appealId: result.rows[0].appeal_id,
+          partnerId: result.rows[0].partner_id,
+          targetRecordId: result.rows[0].target_record_id,
+          status: result.rows[0].status,
+          statement: result.rows[0].statement,
+          openedAt: result.rows[0].opened_at,
+          decidedAt: result.rows[0].decided_at,
+          decisionNote: result.rows[0].decision_note,
+        })
+      : null;
+  }
+
+  async insertAppeal(appeal: AppealCase) {
+    const parsed = AppealCaseSchema.parse(appeal);
+    await this.pool.query(
+      `
+        INSERT INTO appeal_cases (
+          appeal_id, partner_id, target_record_id, status, statement, opened_at, decided_at, decision_note
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8
+        )
+        ON CONFLICT (appeal_id) DO UPDATE SET
+          status = EXCLUDED.status,
+          decided_at = EXCLUDED.decided_at,
+          decision_note = EXCLUDED.decision_note
+      `,
+      [
+        parsed.appealId,
+        parsed.partnerId,
+        parsed.targetRecordId,
+        parsed.status,
+        parsed.statement,
+        parsed.openedAt,
+        parsed.decidedAt,
+        parsed.decisionNote,
+      ],
+    );
+  }
+
+  async updateAppeal(appeal: AppealCase) {
+    const parsed = AppealCaseSchema.parse(appeal);
+    await this.pool.query(
+      `
+        UPDATE appeal_cases
+        SET status = $2,
+            decided_at = $3,
+            decision_note = $4
+        WHERE appeal_id = $1
+      `,
+      [
+        parsed.appealId,
+        parsed.status,
+        parsed.decidedAt,
+        parsed.decisionNote,
+      ],
+    );
+  }
+
   async listPolicyChecks(campaignId?: string) {
     const result = await this.pool.query(
       `
@@ -269,6 +1018,34 @@ export class PostgresPromotionAgentRepository implements PromotionAgentRepositor
         parsed.signature,
       ],
     );
+  }
+
+  async getMeasurementFunnel(query: MeasurementFunnelQuery) {
+    const [receipts, campaigns, partners] = await Promise.all([
+      this.listEventReceipts(),
+      this.listCampaigns(),
+      this.listPartners(),
+    ]);
+    return MeasurementFunnelSchema.parse(
+      buildMeasurementFunnel(receipts, campaigns, partners, MeasurementFunnelQuerySchema.parse(query)),
+    );
+  }
+
+  async getAttributionRows(query: MeasurementFunnelQuery) {
+    const [receipts, settlements, campaigns] = await Promise.all([
+      this.listEventReceipts(),
+      this.listSettlements(),
+      this.listCampaigns(),
+    ]);
+    return buildAttributionRows(receipts, settlements, campaigns, MeasurementFunnelQuerySchema.parse(query));
+  }
+
+  async getBillingDrafts() {
+    const [settlements, campaigns] = await Promise.all([
+      this.listSettlements(),
+      this.listCampaigns(),
+    ]);
+    return buildBillingDrafts(settlements, campaigns);
   }
 
   async listSettlements() {
@@ -686,6 +1463,41 @@ export class PostgresPromotionAgentRepository implements PromotionAgentRepositor
   }
 
   private async seed(seedData: SeedData) {
+    for (const source of seedData.discoverySources) {
+      await this.pool.query(
+        `
+          INSERT INTO discovery_sources (
+            source_id, source_type, name, base_url, seed_urls, active, crawl_policy, vertical_hints, geo_hints, created_at, updated_at
+          ) VALUES (
+            $1, $2, $3, $4, $5::jsonb, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, $11
+          )
+          ON CONFLICT (source_id) DO UPDATE SET
+            source_type = EXCLUDED.source_type,
+            name = EXCLUDED.name,
+            base_url = EXCLUDED.base_url,
+            seed_urls = EXCLUDED.seed_urls,
+            active = EXCLUDED.active,
+            crawl_policy = EXCLUDED.crawl_policy,
+            vertical_hints = EXCLUDED.vertical_hints,
+            geo_hints = EXCLUDED.geo_hints,
+            updated_at = EXCLUDED.updated_at
+        `,
+        [
+          source.sourceId,
+          source.sourceType,
+          source.name,
+          source.baseUrl,
+          toJson(source.seedUrls),
+          source.active,
+          toJson(source.crawlPolicy),
+          toJson(source.verticalHints),
+          toJson(source.geoHints),
+          source.createdAt,
+          source.updatedAt,
+        ],
+      );
+    }
+
     for (const lead of seedData.leads) {
       await this.upsertLead(lead);
     }
@@ -696,6 +1508,26 @@ export class PostgresPromotionAgentRepository implements PromotionAgentRepositor
 
     for (const campaign of seedData.campaigns) {
       await this.upsertCampaign(campaign);
+    }
+
+    for (const record of seedData.verificationRecords) {
+      await this.insertVerificationRecord(record);
+    }
+
+    for (const asset of seedData.evidenceAssets) {
+      await this.insertEvidenceAsset(asset);
+    }
+
+    for (const riskCase of seedData.riskCases) {
+      await this.insertRiskCase(riskCase);
+    }
+
+    for (const reputationRecord of seedData.reputationRecords) {
+      await this.insertReputationRecord(reputationRecord);
+    }
+
+    for (const appeal of seedData.appeals) {
+      await this.insertAppeal(appeal);
     }
 
     const policyCheckCountResult = await this.pool.query<{ count: number }>(
@@ -747,47 +1579,6 @@ export class PostgresPromotionAgentRepository implements PromotionAgentRepositor
         updatedAt,
       });
     }
-  }
-
-  private async upsertLead(lead: AgentLead) {
-    const parsed = AgentLeadSchema.parse(lead);
-    await this.pool.query(
-      `
-        INSERT INTO agent_leads (
-          agent_id, source, provider_org, card_url, verticals, skills, geo, auth_modes, accepts_sponsored,
-          supports_disclosure, trust_seed, lead_score, created_at
-        ) VALUES (
-          $1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9, $10, $11, $12, $13
-        )
-        ON CONFLICT (agent_id) DO UPDATE SET
-          source = EXCLUDED.source,
-          provider_org = EXCLUDED.provider_org,
-          card_url = EXCLUDED.card_url,
-          verticals = EXCLUDED.verticals,
-          skills = EXCLUDED.skills,
-          geo = EXCLUDED.geo,
-          auth_modes = EXCLUDED.auth_modes,
-          accepts_sponsored = EXCLUDED.accepts_sponsored,
-          supports_disclosure = EXCLUDED.supports_disclosure,
-          trust_seed = EXCLUDED.trust_seed,
-          lead_score = EXCLUDED.lead_score
-      `,
-      [
-        parsed.agentId,
-        parsed.source,
-        parsed.providerOrg,
-        parsed.cardUrl,
-        toJson(parsed.verticals),
-        toJson(parsed.skills),
-        toJson(parsed.geo),
-        toJson(parsed.authModes),
-        parsed.acceptsSponsored,
-        parsed.supportsDisclosure,
-        parsed.trustSeed,
-        parsed.leadScore,
-        new Date().toISOString(),
-      ],
-    );
   }
 
   private async upsertPartner(partner: PartnerAgent) {

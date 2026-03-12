@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Promotion Agent - Evidence Center</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="console-shell">
+      <aside class="sidebar">
+        <div class="sidebar-brand">
+          <div class="brand-mark">PA</div>
+          <div class="brand-copy">
+            <p class="brand-kicker">Promotion Agent</p>
+            <h1 class="brand-title">Evidence Center</h1>
+            <p class="brand-subtitle">A cleaner surface for proof assets, verification notes, and campaign support materials.</p>
+          </div>
+        </div>
+        <nav class="sidebar-nav">
+          <a class="sidebar-link" href="/">Workbench</a>
+          <a class="sidebar-link" href="/agents">Agent CRM</a>
+          <a class="sidebar-link" href="/measurement">Measurement</a>
+          <a class="sidebar-link" href="/risk">Risk Center</a>
+          <a class="sidebar-link is-active" href="/evidence">Evidence Center</a>
+          <a class="sidebar-link" href="/audit.html">Audit</a>
+          <a class="sidebar-link" href="/dlq.html">DLQ</a>
+        </nav>
+      </aside>
+
+      <div class="workspace">
+        <header class="topbar">
+          <div class="topbar-copy">
+            <p class="topbar-kicker">Evidence Center</p>
+            <h2 class="topbar-title">证据资产与验证备注</h2>
+            <p class="topbar-subtitle">把 pricing、certificate、case study 等 supporting assets 集中管理，方便风控与运营协同。</p>
+          </div>
+          <div class="topbar-actions">
+            <a class="button button-subtle" href="/">返回主控台</a>
+          </div>
+        </header>
+
+        <main class="workspace-main">
+          <section class="panel panel-wide">
+            <div class="panel-header">
+              <div class="panel-header-copy">
+                <p class="panel-kicker">Evidence Assets</p>
+                <h3 class="panel-title">证据资产</h3>
+              </div>
+            </div>
+            <form id="evidenceForm" class="form-grid">
+              <label><span>Campaign</span><input name="campaignId" value="cmp_hubflow" required /></label>
+              <label><span>Type</span><select name="type"><option value="pricing">pricing</option><option value="case_study">case_study</option><option value="certificate">certificate</option><option value="doc">doc</option><option value="screenshot">screenshot</option></select></label>
+              <label class="span-2"><span>Label</span><input name="label" value="New evidence asset" required /></label>
+              <label class="span-2"><span>URL</span><input name="url" value="https://example.com/evidence" required /></label>
+              <div class="form-actions span-2"><button type="submit" class="button button-primary">新增 Asset</button><span id="evidenceFeedback" class="inline-feedback"></span></div>
+            </form>
+            <div class="split-layout">
+              <div class="data-table-wrap"><table class="data-table data-table--sticky-first"><thead><tr><th>Asset</th><th>Campaign</th><th>Type</th><th>Verified By</th><th>Updated</th></tr></thead><tbody id="evidenceBody"></tbody></table></div>
+              <aside id="evidenceDetail" class="detail-panel"></aside>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+    <script type="module" src="/evidence.js"></script>
+  </body>
+</html>

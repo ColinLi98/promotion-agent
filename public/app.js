@@ -4,11 +4,30 @@ const elements = {
   healthText: document.querySelector("#healthText"),
   summaryCards: document.querySelector("#summaryCards"),
   statusStrip: document.querySelector("#statusStrip"),
-  campaignList: document.querySelector("#campaignList"),
-  partnerList: document.querySelector("#partnerList"),
-  settlementList: document.querySelector("#settlementList"),
-  retryJobList: document.querySelector("#retryJobList"),
-  auditTrailList: document.querySelector("#auditTrailList"),
+  campaignTableBody: document.querySelector("#campaignTableBody"),
+  campaignDetail: document.querySelector("#campaignDetail"),
+  campaignSort: document.querySelector("#campaignSort"),
+  campaignSelectAll: document.querySelector("#campaignSelectAll"),
+  campaignClearSelection: document.querySelector("#campaignClearSelection"),
+  campaignBatchReview: document.querySelector("#campaignBatchReview"),
+  campaignBatchActivate: document.querySelector("#campaignBatchActivate"),
+  campaignBatchFeedback: document.querySelector("#campaignBatchFeedback"),
+  partnerTableBody: document.querySelector("#partnerTableBody"),
+  partnerDetail: document.querySelector("#partnerDetail"),
+  queueTableBody: document.querySelector("#queueTableBody"),
+  queueDetail: document.querySelector("#queueDetail"),
+  queueSort: document.querySelector("#queueSort"),
+  queueSelectAll: document.querySelector("#queueSelectAll"),
+  queueClearSelection: document.querySelector("#queueClearSelection"),
+  queueBatchDispute: document.querySelector("#queueBatchDispute"),
+  queueBatchFeedback: document.querySelector("#queueBatchFeedback"),
+  auditTableBody: document.querySelector("#auditTableBody"),
+  auditDetail: document.querySelector("#auditDetail"),
+  auditSort: document.querySelector("#auditSort"),
+  auditSelectAll: document.querySelector("#auditSelectAll"),
+  auditClearSelection: document.querySelector("#auditClearSelection"),
+  auditCopyTraces: document.querySelector("#auditCopyTraces"),
+  auditBatchFeedback: document.querySelector("#auditBatchFeedback"),
   shortlistResult: document.querySelector("#shortlistResult"),
   campaignForm: document.querySelector("#campaignForm"),
   opportunityForm: document.querySelector("#opportunityForm"),
@@ -29,6 +48,26 @@ const pct = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 1,
 });
 
+const state = {
+  selectedCampaignId: null,
+  selectedCampaignIds: new Set(),
+  selectedPartnerId: null,
+  selectedSettlementId: null,
+  selectedSettlementIds: new Set(),
+  selectedAuditEventId: null,
+  selectedAuditEventIds: new Set(),
+};
+
+const runtimeData = {
+  dashboard: null,
+  partners: [],
+  campaigns: [],
+  policyChecks: [],
+  settlements: [],
+  retryJobs: [],
+  auditEvents: [],
+};
+
 const api = {
   get: (path) => fetch(path).then((response) => response.json()),
   post: async (path, payload) => {
@@ -48,6 +87,9 @@ const api = {
   },
 };
 
+const campaignStatusOrder = ["reviewing", "draft", "active", "paused", "rejected"];
+const settlementStatusOrder = ["retry_scheduled", "pending", "processing", "failed", "disputed", "settled"];
+
 const stableReceiptIdFor = ({ intentId, offerId, partnerId, campaignId }) =>
   `rcpt_${[intentId, offerId, partnerId, campaignId, "shortlisted"].join("_").replaceAll(/[^a-zA-Z0-9_]/g, "_")}`;
 
@@ -62,7 +104,10 @@ const escapeHtml = (value) =>
 const badge = (value, label = value) =>
   `<span class="badge ${escapeHtml(String(value).toLowerCase())}">${escapeHtml(label)}</span>`;
 
-const createMetricCard = (label, value, foot) => `
+const iconChip = (label, glyph) =>
+  `<span class="icon-chip"><span class="icon-glyph">${escapeHtml(glyph)}</span>${escapeHtml(label)}</span>`;
+
+const metricCard = (label, value, foot) => `
   <article class="metric-card">
     <p class="metric-label">${escapeHtml(label)}</p>
     <p class="metric-value">${escapeHtml(value)}</p>
@@ -70,211 +115,345 @@ const createMetricCard = (label, value, foot) => `
   </article>
 `;
 
+const detailSection = (title, value) => `
+  <section class="detail-section">
+    <p class="detail-section-title">${escapeHtml(title)}</p>
+    <div class="detail-section-value">${value}</div>
+  </section>
+`;
+
+const emptyState = (title, copy) => `
+  <div class="empty-state">
+    <strong>${escapeHtml(title)}</strong>
+    <div class="meta-row">${escapeHtml(copy)}</div>
+  </div>
+`;
+
+const setFeedback = (element, message, tone = "info") => {
+  element.textContent = message;
+  element.style.color = tone === "error" ? "var(--danger)" : tone === "success" ? "var(--success)" : "var(--text-muted)";
+};
+
+const compareByListOrder = (order, value) => {
+  const index = order.indexOf(value);
+  return index === -1 ? order.length : index;
+};
+
+const sortCampaigns = (campaigns) => {
+  switch (elements.campaignSort.value) {
+    case "payout_desc":
+      return campaigns.slice().sort((left, right) => right.payoutAmount - left.payoutAmount);
+    case "advertiser":
+      return campaigns.slice().sort((left, right) => left.advertiser.localeCompare(right.advertiser));
+    case "status":
+    default:
+      return campaigns
+        .slice()
+        .sort((left, right) => compareByListOrder(campaignStatusOrder, left.status) - compareByListOrder(campaignStatusOrder, right.status) || left.advertiser.localeCompare(right.advertiser));
+  }
+};
+
+const sortSettlements = (settlements) => {
+  switch (elements.queueSort.value) {
+    case "amount_desc":
+      return settlements.slice().sort((left, right) => right.amount - left.amount);
+    case "status":
+      return settlements
+        .slice()
+        .sort((left, right) => compareByListOrder(settlementStatusOrder, left.status) - compareByListOrder(settlementStatusOrder, right.status));
+    case "recent":
+    default:
+      return settlements.slice().sort((left, right) => new Date(right.generatedAt).getTime() - new Date(left.generatedAt).getTime());
+  }
+};
+
+const sortAuditEvents = (events) => {
+  switch (elements.auditSort.value) {
+    case "status":
+      return events.slice().sort((left, right) => left.status.localeCompare(right.status));
+    case "actor":
+      return events.slice().sort((left, right) => left.actorType.localeCompare(right.actorType));
+    case "recent":
+    default:
+      return events.slice().sort((left, right) => new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime());
+  }
+};
+
 const renderSummary = (dashboard) => {
   elements.summaryCards.innerHTML = [
-    createMetricCard("Active Partners", dashboard.activePartners, "当前可以承接 sponsored shortlist 的合作方"),
-    createMetricCard("Active Campaigns", dashboard.activeCampaigns, "已通过 policy 并进入排序候选"),
-    createMetricCard("Settlements", dashboard.settlementCount, "收到合格回执后写入的账单记录"),
-    createMetricCard("Qualified Recommendation Rate", pct.format(dashboard.qualifiedRecommendationRate), "当前按 intent 聚合的 shortlist 命中比率"),
+    metricCard("Active Partners", dashboard.activePartners, "当前可以承接 sponsored shortlist 的合作方"),
+    metricCard("Active Campaigns", dashboard.activeCampaigns, "已通过 policy 并进入排序候选"),
+    metricCard("Settlements", dashboard.settlementCount, "收到合格回执后写入的账单记录"),
+    metricCard("Qualified Recommendation Rate", pct.format(dashboard.qualifiedRecommendationRate), "当前按 intent 聚合的 shortlist 命中比率"),
+    metricCard("Detail View Rate", pct.format(dashboard.detailViewRate), "从 shown 到 detail_view 的展开率"),
+    metricCard("Disclosure Shown Rate", pct.format(dashboard.disclosureShownRate), "赞助结果被正确披露展示的比例"),
+    metricCard("Action Conversion Rate", pct.format(dashboard.actionConversionRate), "handoff 后进入 conversion 的比例"),
+    metricCard("Qualified Agent Coverage", dashboard.qualifiedAgentCoverage, "已验证且可上线的目标 agent 数量"),
   ].join("");
 };
 
 const renderStatusStrip = (dashboard, campaigns, partners, settlements) => {
   const reviewing = campaigns.filter((campaign) => campaign.status === "reviewing").length;
   const rejected = campaigns.filter((campaign) => campaign.status === "rejected").length;
-  const active = campaigns.filter((campaign) => campaign.status === "active").length;
+  const queued = settlements.filter((settlement) => settlement.status === "pending" || settlement.status === "retry_scheduled").length;
 
   elements.statusStrip.innerHTML = `
     <article class="status-block">
       <div class="status-title"><strong>Discovery Surface</strong>${badge("active", `${partners.length} agents`)}</div>
       <div class="status-stat">${partners.length}</div>
-      <p class="status-copy">合作 agent 已经可展示，并带有 sponsored / disclosure 能力标签。</p>
+      <p class="status-copy">合作 agent 存量与覆盖情况。</p>
     </article>
     <article class="status-block">
       <div class="status-title"><strong>Review Queue</strong>${badge("reviewing", `${reviewing} reviewing`)}</div>
       <div class="status-stat">${reviewing}</div>
-      <p class="status-copy">新活动会先进入预检和审核，而不是直接进排序。</p>
+      <p class="status-copy">还没进入 active 的 campaign 数。</p>
     </article>
     <article class="status-block">
-      <div class="status-title"><strong>Active Inventory</strong>${badge("active", `${active} active`)}</div>
-      <div class="status-stat">${active}</div>
-      <p class="status-copy">只有通过 gates 的 campaign 才能参与 sponsored reranking。</p>
+      <div class="status-title"><strong>Queued Settlements</strong>${badge(queued ? "reviewing" : "active", `${queued} queued`)}</div>
+      <div class="status-stat">${queued}</div>
+      <p class="status-copy">正在等待 worker 消费或 retry 的结算。</p>
     </article>
     <article class="status-block">
-      <div class="status-title"><strong>Settlement Loop</strong>${badge(settlements.length ? "active" : "draft", `${settlements.length} receipts`)}</div>
-      <div class="status-stat">${settlements.length}</div>
-      <p class="status-copy">结算闭环已接好。当前 rejection 数：${rejected}。</p>
+      <div class="status-title"><strong>Rejected Inventory</strong>${badge(rejected ? "failure" : "active", `${rejected} rejected`)}</div>
+      <div class="status-stat">${rejected}</div>
+      <p class="status-copy">需要回头修正 policy 或风控问题的活动。</p>
     </article>
   `;
 };
 
-const renderCampaigns = (campaigns, policyChecks) => {
-  if (!campaigns.length) {
-    elements.campaignList.innerHTML = `<div class="empty-state">还没有 campaign。</div>`;
-    return;
+const summarizeBatch = (label, results) => {
+  const success = results.filter((item) => item.ok).map((item) => item.id);
+  const failed = results.filter((item) => !item.ok).map((item) => item.id);
+  return `${label} 完成: 成功 ${success.length}，失败 ${failed.length}${failed.length ? `，失败项 ${failed.join(", ")}` : ""}`;
+};
+
+const renderCampaignTable = () => {
+  const campaigns = sortCampaigns(runtimeData.campaigns);
+  const latestPolicyByCampaignId = new Map(runtimeData.policyChecks.map((item) => [item.campaignId, item]));
+  if (!state.selectedCampaignId && campaigns.length) {
+    state.selectedCampaignId = campaigns[0].campaignId;
   }
 
-  const latestPolicyByCampaignId = new Map(
-    policyChecks.map((item) => [item.campaignId, item]),
-  );
-
-  elements.campaignList.innerHTML = campaigns
+  elements.campaignTableBody.innerHTML = campaigns
     .map((campaign) => {
       const policyCheck = latestPolicyByCampaignId.get(campaign.campaignId);
-      const riskFlags = policyCheck?.riskFlags?.length
-        ? policyCheck.riskFlags.map((flag) => badge("manual_review", flag)).join("")
-        : badge("pass", "no risk flag");
-      const canActivate = campaign.status === "reviewing" && policyCheck?.decision === "pass";
-
       return `
-        <article class="list-card">
-          <div class="list-card-header">
-            <div>
-              <h3 class="card-title">${escapeHtml(campaign.advertiser)} · ${escapeHtml(campaign.offer.title)}</h3>
-              <p class="card-subtitle">${escapeHtml(campaign.category)} · ${escapeHtml(campaign.billingModel)} · payout ${currency.format(campaign.payoutAmount)}</p>
-            </div>
-            <div class="badge-row">
-              ${badge(campaign.status)}
-              ${policyCheck ? badge(policyCheck.decision) : badge("draft", "unchecked")}
-            </div>
-          </div>
-          <div class="meta-row">Disclosure: ${escapeHtml(campaign.disclosureText)}</div>
-          <div class="meta-row">Claims: ${campaign.offer.claims.map((claim) => escapeHtml(claim)).join(" / ")}</div>
-          <div class="badge-row">${riskFlags}</div>
-          <div class="card-actions">
-            <div class="meta-row">Offer ID: ${escapeHtml(campaign.offer.offerId)}</div>
-            <div class="hero-actions">
-              <button class="button button-subtle" data-action="review" data-campaign-id="${escapeHtml(campaign.campaignId)}">重新 Review</button>
-              ${canActivate ? `<button class="button button-primary" data-action="activate" data-campaign-id="${escapeHtml(campaign.campaignId)}">Activate</button>` : ""}
-            </div>
-          </div>
-        </article>
+        <tr class="${campaign.campaignId === state.selectedCampaignId ? "is-selected" : ""}">
+          <td class="selection-cell"><input class="selection-checkbox" type="checkbox" data-campaign-check="${escapeHtml(campaign.campaignId)}" ${state.selectedCampaignIds.has(campaign.campaignId) ? "checked" : ""}></td>
+          <td>
+            <button class="row-button" data-select-campaign="${escapeHtml(campaign.campaignId)}">
+              <strong>${escapeHtml(campaign.advertiser)}</strong>
+              <div class="meta-row">${escapeHtml(campaign.offer.title)}</div>
+            </button>
+          </td>
+          <td>${badge(campaign.status)}</td>
+          <td>${policyCheck ? badge(policyCheck.decision) : badge("draft", "unchecked")}</td>
+          <td>${escapeHtml(campaign.billingModel)}</td>
+          <td>${currency.format(campaign.payoutAmount)}</td>
+          <td>${escapeHtml(campaign.category)}</td>
+        </tr>
       `;
     })
     .join("");
-};
 
-const renderPartners = (partners) => {
-  if (!partners.length) {
-    elements.partnerList.innerHTML = `<div class="empty-state">还没有 partner agent。</div>`;
+  const selected = campaigns.find((campaign) => campaign.campaignId === state.selectedCampaignId) ?? campaigns[0];
+  const selectedPolicy = latestPolicyByCampaignId.get(selected?.campaignId);
+  if (!selected) {
+    elements.campaignDetail.innerHTML = emptyState("没有活动", "先创建 campaign，或从筛选中放宽条件。");
     return;
   }
 
-  elements.partnerList.innerHTML = partners
-    .map(
-      (partner) => `
-        <article class="list-card">
-          <div class="list-card-header">
-            <div>
-              <h3 class="card-title">${escapeHtml(partner.providerOrg)}</h3>
-              <p class="card-subtitle">${escapeHtml(partner.endpoint)}</p>
-            </div>
-            <div class="badge-row">
-              ${badge(partner.status)}
-              ${badge("active", `trust ${partner.trustScore.toFixed(2)}`)}
-            </div>
-          </div>
-          <div class="meta-row">Supported categories: ${partner.supportedCategories.map(escapeHtml).join(", ")}</div>
-          <div class="meta-row">Auth: ${partner.authModes.map(escapeHtml).join(", ")} · Disclosure: ${partner.supportsDisclosure ? "yes" : "no"}</div>
-        </article>
-      `,
-    )
-    .join("");
+  const riskFlags = selectedPolicy?.riskFlags?.length
+    ? selectedPolicy.riskFlags.map((flag) => iconChip(flag, "!")).join("")
+    : iconChip("no risk flag", "OK");
+
+  elements.campaignDetail.innerHTML = `
+    ${detailSection("Summary", `
+      <h3 class="panel-title">${escapeHtml(selected.advertiser)} · ${escapeHtml(selected.offer.title)}</h3>
+      <p class="meta-row">${badge(selected.status)} ${selectedPolicy ? badge(selectedPolicy.decision) : badge("draft", "unchecked")}</p>
+    `)}
+    ${detailSection("Commercial", `
+      <p class="meta-row">Billing ${escapeHtml(selected.billingModel)} · Payout ${currency.format(selected.payoutAmount)} · Budget ${currency.format(selected.budget)}</p>
+      <p class="meta-row">Category ${escapeHtml(selected.category)} · Region ${escapeHtml(selected.regions.join(", "))}</p>
+    `)}
+    ${detailSection("Proof & Disclosure", `
+      <p class="meta-row">${escapeHtml(selected.disclosureText)}</p>
+      <div class="badge-row">${riskFlags}</div>
+      <p class="meta-row">Claims: ${escapeHtml(selected.offer.claims.join(" / "))}</p>
+    `)}
+    ${detailSection("Operator Focus", `
+      <p class="meta-row">Selected campaigns: ${state.selectedCampaignIds.size}</p>
+      <p class="meta-row">Use batch actions for review/activation, or act on this single campaign below.</p>
+    `)}
+    <div class="card-actions">
+      <button class="button button-subtle" data-action="review" data-campaign-id="${escapeHtml(selected.campaignId)}">重新 Review</button>
+      ${selected.status === "reviewing" && selectedPolicy?.decision === "pass" ? `<button class="button button-primary" data-action="activate" data-campaign-id="${escapeHtml(selected.campaignId)}">Activate</button>` : ""}
+    </div>
+  `;
 };
 
-const renderSettlements = (settlements) => {
-  if (!settlements.length) {
-    elements.settlementList.innerHTML = `<div class="empty-state">还没有 settlement。先跑一次 shortlist 回执就会出现。</div>`;
+const renderPartnerTable = () => {
+  const partners = runtimeData.partners.slice().sort((left, right) => right.trustScore - left.trustScore);
+  if (!state.selectedPartnerId && partners.length) {
+    state.selectedPartnerId = partners[0].partnerId;
+  }
+
+  elements.partnerTableBody.innerHTML = partners
+    .map((partner) => `
+      <tr class="${partner.partnerId === state.selectedPartnerId ? "is-selected" : ""}">
+        <td>
+          <button class="row-button" data-select-partner="${escapeHtml(partner.partnerId)}">
+            <strong>${escapeHtml(partner.providerOrg)}</strong>
+            <div class="meta-row">${escapeHtml(partner.supportedCategories.join(", "))}</div>
+          </button>
+        </td>
+        <td>${badge(partner.status)}</td>
+        <td>${partner.trustScore.toFixed(2)}</td>
+        <td>${partner.supportsDisclosure ? iconChip("ready", "D") : iconChip("missing", "!")}</td>
+        <td>${escapeHtml(partner.authModes.join(", "))}</td>
+      </tr>
+    `)
+    .join("");
+
+  const selected = partners.find((partner) => partner.partnerId === state.selectedPartnerId) ?? partners[0];
+  if (!selected) {
+    elements.partnerDetail.innerHTML = emptyState("没有 partner", "当前没有可展示的合作 agent。");
     return;
   }
 
-  elements.settlementList.innerHTML = settlements
-    .map(
-      (settlement) => `
-        <article class="list-card">
-          <div class="list-card-header">
-            <div>
-              <h3 class="card-title">${escapeHtml(settlement.billingModel)} · ${currency.format(settlement.amount)}</h3>
-              <p class="card-subtitle">Campaign ${escapeHtml(settlement.campaignId)} · Offer ${escapeHtml(settlement.offerId)}</p>
-            </div>
-            <div class="badge-row">
-              ${badge(settlement.status)}
-              ${badge("active", settlement.eventType)}
-            </div>
-          </div>
-          <div class="meta-row">Attribution window: ${escapeHtml(settlement.attributionWindow)} · Generated at: ${escapeHtml(new Date(settlement.generatedAt).toLocaleString())}</div>
-          <div class="card-actions">
-            <div class="meta-row">Settlement ID: ${escapeHtml(settlement.settlementId)}</div>
-            ${
-              settlement.status !== "disputed" && settlement.status !== "settled" && settlement.status !== "failed"
-                ? `<button class="button button-subtle" data-action="dispute-settlement" data-settlement-id="${escapeHtml(settlement.settlementId)}">标记为 Disputed</button>`
-                : ""
-            }
-          </div>
-        </article>
-      `,
-    )
-    .join("");
+  elements.partnerDetail.innerHTML = `
+    ${detailSection("Partner", `
+      <h3 class="panel-title">${escapeHtml(selected.providerOrg)}</h3>
+      <p class="meta-row">${badge(selected.status)} ${iconChip(`trust ${selected.trustScore.toFixed(2)}`, "T")}</p>
+    `)}
+    ${detailSection("Integration", `
+      <p class="meta-row">${escapeHtml(selected.endpoint)}</p>
+      <p class="meta-row">Auth: ${escapeHtml(selected.authModes.join(", "))}</p>
+      <p class="meta-row">Disclosure: ${selected.supportsDisclosure ? "yes" : "no"}</p>
+    `)}
+    ${detailSection("Capability", `
+      <p class="meta-row">Categories: ${escapeHtml(selected.supportedCategories.join(", "))}</p>
+      <p class="meta-row">SLA tier: ${escapeHtml(selected.slaTier)}</p>
+    `)}
+  `;
 };
 
-const renderRetryJobs = (retryJobs) => {
-  if (!retryJobs.length) {
-    elements.retryJobList.innerHTML = `<div class="empty-state">当前没有 retry job。</div>`;
+const renderQueueTable = () => {
+  const retryBySettlementId = new Map(runtimeData.retryJobs.map((job) => [job.settlementId, job]));
+  const settlements = sortSettlements(runtimeData.settlements);
+  if (!state.selectedSettlementId && settlements.length) {
+    state.selectedSettlementId = settlements[0].settlementId;
+  }
+
+  elements.queueTableBody.innerHTML = settlements
+    .map((settlement) => {
+      const retryJob = retryBySettlementId.get(settlement.settlementId);
+      return `
+        <tr class="${settlement.settlementId === state.selectedSettlementId ? "is-selected" : ""}">
+          <td class="selection-cell"><input class="selection-checkbox" type="checkbox" data-settlement-check="${escapeHtml(settlement.settlementId)}" ${state.selectedSettlementIds.has(settlement.settlementId) ? "checked" : ""}></td>
+          <td>
+            <button class="row-button" data-select-settlement="${escapeHtml(settlement.settlementId)}">
+              <strong>${escapeHtml(settlement.settlementId)}</strong>
+              <div class="meta-row">${escapeHtml(settlement.intentId)}</div>
+            </button>
+          </td>
+          <td>${badge(settlement.status)}</td>
+          <td>${escapeHtml(settlement.billingModel)}</td>
+          <td>${currency.format(settlement.amount)}</td>
+          <td>${retryJob ? badge(retryJob.status) : badge("draft", "none")}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  const selected = settlements.find((settlement) => settlement.settlementId === state.selectedSettlementId) ?? settlements[0];
+  const selectedRetryJob = retryBySettlementId.get(selected?.settlementId ?? "");
+  if (!selected) {
+    elements.queueDetail.innerHTML = emptyState("没有 settlement", "当前没有进入首页队列视图的结算记录。");
     return;
   }
 
-  elements.retryJobList.innerHTML = retryJobs
-    .map(
-      (job) => `
-        <article class="list-card">
-          <div class="list-card-header">
-            <div>
-              <h3 class="card-title">${escapeHtml(job.retryJobId)}</h3>
-              <p class="card-subtitle">Settlement ${escapeHtml(job.settlementId)} · Trace ${escapeHtml(job.traceId)}</p>
-            </div>
-            <div class="badge-row">
-              ${badge(job.status)}
-              ${badge("draft", `attempt ${job.attempts}/${job.maxAttempts}`)}
-            </div>
-          </div>
-          <div class="meta-row">Next run: ${escapeHtml(new Date(job.nextRunAt).toLocaleString())}</div>
-          <div class="meta-row">Last error: ${escapeHtml(job.lastError ?? "none")}</div>
-        </article>
-      `,
-    )
-    .join("");
+  elements.queueDetail.innerHTML = `
+    ${detailSection("Settlement", `
+      <h3 class="panel-title">${escapeHtml(selected.settlementId)}</h3>
+      <p class="meta-row">${badge(selected.status)} ${badge(selected.eventType)}</p>
+    `)}
+    ${detailSection("Provider", `
+      <p class="meta-row">State: ${escapeHtml(selected.providerState ?? "pending")}</p>
+      <p class="meta-row">Code: ${escapeHtml(selected.providerResponseCode ?? "n/a")}</p>
+      <p class="meta-row">Reference: ${escapeHtml(selected.providerReference ?? "n/a")}</p>
+    `)}
+    ${detailSection("Queue", selectedRetryJob ? `
+      <p class="meta-row">Job ${escapeHtml(selectedRetryJob.retryJobId)} · ${badge(selectedRetryJob.status)}</p>
+      <p class="meta-row">Attempts ${selectedRetryJob.attempts}/${selectedRetryJob.maxAttempts}</p>
+      <p class="meta-row">Last error: ${escapeHtml(selectedRetryJob.lastError ?? "none")}</p>
+    ` : `<p class="meta-row">No retry job linked.</p>`)}
+    ${detailSection("Operator Focus", `
+      <p class="meta-row">Selected settlements: ${state.selectedSettlementIds.size}</p>
+      <p class="meta-row">批量 Dispute 适合处理一组明显有问题的结算。</p>
+    `)}
+    <div class="card-actions">
+      ${selected.status !== "disputed" && selected.status !== "settled" && selected.status !== "failed" ? `<button class="button button-subtle" data-action="dispute-settlement" data-settlement-id="${escapeHtml(selected.settlementId)}">标记为 Disputed</button>` : ""}
+      <a class="button button-subtle" href="/dlq.html?traceId=${encodeURIComponent(selected.intentId)}">查看 DLQ</a>
+    </div>
+  `;
 };
 
-const renderAuditTrail = (auditEvents) => {
-  const items = auditEvents.items ?? [];
-  if (!items.length) {
-    elements.auditTrailList.innerHTML = `<div class="empty-state">还没有 audit event。</div>`;
+const renderAuditTable = () => {
+  const auditEvents = sortAuditEvents(runtimeData.auditEvents.items ?? []);
+  if (!state.selectedAuditEventId && auditEvents.length) {
+    state.selectedAuditEventId = auditEvents[0].auditEventId;
+  }
+
+  elements.auditTableBody.innerHTML = auditEvents
+    .map((event) => `
+      <tr class="${event.auditEventId === state.selectedAuditEventId ? "is-selected" : ""}">
+        <td class="selection-cell"><input class="selection-checkbox" type="checkbox" data-audit-check="${escapeHtml(event.auditEventId)}" ${state.selectedAuditEventIds.has(event.auditEventId) ? "checked" : ""}></td>
+        <td>
+          <button class="row-button" data-select-audit="${escapeHtml(event.auditEventId)}">
+            <strong>${escapeHtml(event.action)}</strong>
+            <div class="meta-row">${escapeHtml(event.entityType)}</div>
+          </button>
+        </td>
+        <td class="mono">${escapeHtml(event.traceId)}</td>
+        <td>${escapeHtml(event.entityId)}</td>
+        <td>${badge(event.status)}</td>
+        <td>${iconChip(event.actorType, event.actorType === "system" ? "S" : "O")}</td>
+      </tr>
+    `)
+    .join("");
+
+  const selected = auditEvents.find((event) => event.auditEventId === state.selectedAuditEventId) ?? auditEvents[0];
+  if (!selected) {
+    elements.auditDetail.innerHTML = emptyState("没有 audit event", "当前页没有可查看的审计事件。");
     return;
   }
 
-  elements.auditTrailList.innerHTML = auditEvents
-    .items.map(
-      (event) => `
-        <article class="list-card">
-          <div class="list-card-header">
-            <div>
-              <h3 class="card-title">${escapeHtml(event.action)}</h3>
-              <p class="card-subtitle">
-                <a href="/audit.html?traceId=${encodeURIComponent(event.traceId)}" class="inline-link">${escapeHtml(event.traceId)}</a>
-                · ${escapeHtml(event.entityType)} · ${escapeHtml(event.entityId)}
-              </p>
-            </div>
-            <div class="badge-row">
-              ${badge(event.status)}
-              ${badge("draft", event.actorType)}
-            </div>
+  elements.auditDetail.innerHTML = `
+    ${detailSection("Event", `
+      <h3 class="panel-title">${escapeHtml(selected.action)}</h3>
+      <p class="meta-row">${badge(selected.status)} ${iconChip(selected.actorType, selected.actorType === "system" ? "S" : "O")}</p>
+    `)}
+    ${detailSection("Timeline", `
+      <div class="timeline">
+        <div class="timeline-item">
+          <span class="timeline-dot"></span>
+          <div class="timeline-body">
+            <p class="timeline-title">${escapeHtml(selected.entityType)} · ${escapeHtml(selected.entityId)}</p>
+            <p class="timeline-meta">${new Date(selected.occurredAt).toLocaleString()}</p>
           </div>
-          <div class="meta-row">Trace: ${escapeHtml(event.traceId)} · At: ${escapeHtml(new Date(event.occurredAt).toLocaleString())}</div>
-          <div class="meta-row">Details: ${escapeHtml(JSON.stringify(event.details))}</div>
-        </article>
-      `,
-    )
-    .join("");
+        </div>
+      </div>
+    `)}
+    ${detailSection("Operator Focus", `
+      <p class="meta-row">Selected audit events: ${state.selectedAuditEventIds.size}</p>
+      <p class="meta-row">使用复制 trace 功能，把一组相关事件直接带去 Drill-Down 页面或团队沟通中。</p>
+    `)}
+    ${detailSection("Details", `<pre class="mono code-block">${escapeHtml(JSON.stringify(selected.details, null, 2))}</pre>`)}
+    <div class="card-actions">
+      <a class="button button-subtle" href="/audit.html?traceId=${encodeURIComponent(selected.traceId)}&pageSize=20">打开完整 Trace</a>
+    </div>
+  `;
 };
 
 const renderShortlist = (result) => {
@@ -332,9 +511,14 @@ const renderShortlist = (result) => {
     .join("");
 };
 
-const setFeedback = (element, message, tone = "info") => {
-  element.textContent = message;
-  element.style.color = tone === "error" ? "var(--danger)" : tone === "success" ? "var(--success)" : "var(--muted)";
+const renderAll = () => {
+  if (!runtimeData.dashboard) return;
+  renderSummary(runtimeData.dashboard);
+  renderStatusStrip(runtimeData.dashboard, runtimeData.campaigns, runtimeData.partners, runtimeData.settlements);
+  renderCampaignTable();
+  renderPartnerTable();
+  renderQueueTable();
+  renderAuditTable();
 };
 
 const loadState = async () => {
@@ -345,21 +529,23 @@ const loadState = async () => {
     api.get("/campaigns"),
     api.get("/policy-checks"),
     api.get("/settlements"),
-    api.get("/settlements/retry-jobs?limit=12"),
-    api.get("/audit-trail?page=1&pageSize=12"),
+    api.get("/settlements/retry-jobs?limit=20"),
+    api.get("/audit-trail?page=1&pageSize=20"),
   ]);
+
+  runtimeData.dashboard = dashboard;
+  runtimeData.partners = partners;
+  runtimeData.campaigns = campaigns;
+  runtimeData.policyChecks = policyChecks;
+  runtimeData.settlements = settlements;
+  runtimeData.retryJobs = retryJobs;
+  runtimeData.auditEvents = auditEvents;
 
   elements.healthText.textContent = health.ok ? "Operational" : "Unavailable";
   elements.healthDot.classList.toggle("ok", Boolean(health.ok));
   elements.healthDot.classList.toggle("down", !health.ok);
 
-  renderSummary(dashboard);
-  renderStatusStrip(dashboard, campaigns, partners, settlements);
-  renderCampaigns(campaigns, policyChecks);
-  renderPartners(partners);
-  renderSettlements(settlements);
-  renderRetryJobs(retryJobs);
-  renderAuditTrail(auditEvents);
+  renderAll();
 };
 
 elements.refreshAll.addEventListener("click", () => {
@@ -367,6 +553,103 @@ elements.refreshAll.addEventListener("click", () => {
     console.error(error);
     setFeedback(elements.campaignFormResult, "刷新失败，请检查服务状态。", "error");
   });
+});
+
+elements.campaignSort.addEventListener("change", () => renderCampaignTable());
+elements.queueSort.addEventListener("change", () => renderQueueTable());
+elements.auditSort.addEventListener("change", () => renderAuditTable());
+
+elements.campaignSelectAll.addEventListener("click", () => {
+  state.selectedCampaignIds = new Set(runtimeData.campaigns.map((campaign) => campaign.campaignId));
+  setFeedback(elements.campaignBatchFeedback, `已选择 ${state.selectedCampaignIds.size} 个 campaign。`, "info");
+  renderCampaignTable();
+});
+
+elements.campaignClearSelection.addEventListener("click", () => {
+  state.selectedCampaignIds.clear();
+  setFeedback(elements.campaignBatchFeedback, "已清空 campaign 选择。", "info");
+  renderCampaignTable();
+});
+
+elements.queueSelectAll.addEventListener("click", () => {
+  state.selectedSettlementIds = new Set(runtimeData.settlements.map((settlement) => settlement.settlementId));
+  setFeedback(elements.queueBatchFeedback, `已选择 ${state.selectedSettlementIds.size} 个 settlement。`, "info");
+  renderQueueTable();
+});
+
+elements.queueClearSelection.addEventListener("click", () => {
+  state.selectedSettlementIds.clear();
+  setFeedback(elements.queueBatchFeedback, "已清空 settlement 选择。", "info");
+  renderQueueTable();
+});
+
+elements.auditSelectAll.addEventListener("click", () => {
+  state.selectedAuditEventIds = new Set((runtimeData.auditEvents.items ?? []).map((event) => event.auditEventId));
+  setFeedback(elements.auditBatchFeedback, `已选择 ${state.selectedAuditEventIds.size} 条 audit event。`, "info");
+  renderAuditTable();
+});
+
+elements.auditClearSelection.addEventListener("click", () => {
+  state.selectedAuditEventIds.clear();
+  setFeedback(elements.auditBatchFeedback, "已清空 audit 选择。", "info");
+  renderAuditTable();
+});
+
+elements.auditCopyTraces.addEventListener("click", async () => {
+  if (state.selectedAuditEventIds.size === 0) {
+    setFeedback(elements.auditBatchFeedback, "先选择至少一条 audit event。", "info");
+    return;
+  }
+  const selected = (runtimeData.auditEvents.items ?? []).filter((event) => state.selectedAuditEventIds.has(event.auditEventId));
+  const text = [...new Set(selected.map((event) => event.traceId))].join("\n");
+  try {
+    await navigator.clipboard.writeText(text);
+    setFeedback(elements.auditBatchFeedback, "已复制选中 trace。", "success");
+  } catch {
+    setFeedback(elements.auditBatchFeedback, text, "info");
+  }
+});
+
+elements.campaignBatchReview.addEventListener("click", async () => {
+  if (state.selectedCampaignIds.size === 0) {
+    setFeedback(elements.campaignBatchFeedback, "先选择至少一个 campaign。", "info");
+    return;
+  }
+  const results = [];
+  for (const id of state.selectedCampaignIds) {
+    const response = await api.post(`/campaigns/${id}/review`, {});
+    results.push({ id, ok: response.ok });
+  }
+  setFeedback(elements.campaignBatchFeedback, summarizeBatch("批量 Review", results), results.every((item) => item.ok) ? "success" : "info");
+  await loadState();
+});
+
+elements.campaignBatchActivate.addEventListener("click", async () => {
+  if (state.selectedCampaignIds.size === 0) {
+    setFeedback(elements.campaignBatchFeedback, "先选择至少一个 campaign。", "info");
+    return;
+  }
+  const results = [];
+  for (const id of state.selectedCampaignIds) {
+    const response = await api.post(`/campaigns/${id}/activate`, {});
+    results.push({ id, ok: response.ok && response.status !== 409 });
+  }
+  setFeedback(elements.campaignBatchFeedback, summarizeBatch("批量 Activate", results), results.every((item) => item.ok) ? "success" : "info");
+  await loadState();
+});
+
+elements.queueBatchDispute.addEventListener("click", async () => {
+  if (state.selectedSettlementIds.size === 0) {
+    setFeedback(elements.queueBatchFeedback, "先选择至少一个 settlement。", "info");
+    return;
+  }
+  const results = [];
+  for (const id of state.selectedSettlementIds) {
+    const response = await api.post(`/settlements/${id}/dispute`, {});
+    results.push({ id, ok: response.ok });
+  }
+  setFeedback(elements.queueBatchFeedback, summarizeBatch("批量 Dispute", results), results.every((item) => item.ok) ? "success" : "info");
+  await loadState();
 });
 
 elements.campaignForm.addEventListener("submit", async (event) => {
@@ -412,11 +695,8 @@ elements.campaignForm.addEventListener("submit", async (event) => {
   }
 
   const { campaign, policyCheck } = response.body;
-  setFeedback(
-    elements.campaignFormResult,
-    `已创建 ${campaign.campaignId}，当前状态 ${campaign.status}，policy=${policyCheck.decision}`,
-    "success",
-  );
+  state.selectedCampaignId = campaign.campaignId;
+  setFeedback(elements.campaignFormResult, `已创建 ${campaign.campaignId}，状态 ${campaign.status}，policy=${policyCheck.decision}`, "success");
   await loadState();
 });
 
@@ -445,117 +725,114 @@ elements.opportunityForm.addEventListener("submit", async (event) => {
   }
 
   renderShortlist(response.body);
-  setFeedback(
-    elements.opportunityResult,
-    `返回 ${response.body.shortlisted.length} 个 shortlist 候选，eligible=${response.body.eligibleCandidates}`,
-    "success",
-  );
-});
-
-document.addEventListener("click", async (event) => {
-  const button = event.target.closest("button[data-action]");
-  if (!button) {
-    return;
-  }
-
-  const campaignId = button.dataset.campaignId;
-  const action = button.dataset.action;
-  if (!campaignId || !action || action === "receipt") {
-    return;
-  }
-
-  const response = await api.post(`/campaigns/${campaignId}/${action}`, {});
-  if (!response.ok && response.status !== 409) {
-    setFeedback(elements.campaignFormResult, `${action} 失败: HTTP ${response.status}`, "error");
-    return;
-  }
-
-  if (action === "activate" && response.status === 409) {
-    setFeedback(
-      elements.campaignFormResult,
-      `Campaign ${campaignId} 未通过激活: ${response.body.policyCheck.decision}`,
-      "error",
-    );
-  } else {
-    setFeedback(elements.campaignFormResult, `Campaign ${campaignId} 已执行 ${action}。`, "success");
-  }
-
-  await loadState();
+  setFeedback(elements.opportunityResult, `返回 ${response.body.shortlisted.length} 个 shortlist 候选，eligible=${response.body.eligibleCandidates}`, "success");
 });
 
 elements.processRetryQueue.addEventListener("click", async () => {
-  const response = await api.post("/settlements/retry-queue/process", {
-    limit: 20,
-  });
-
+  const response = await api.post("/settlements/retry-queue/process", { limit: 20 });
   if (!response.ok) {
     setFeedback(elements.retryQueueResult, `处理失败: HTTP ${response.status}`, "error");
     return;
   }
-
-  setFeedback(
-    elements.retryQueueResult,
-    `processed=${response.body.processedCount} settled=${response.body.settledCount} retried=${response.body.rescheduledCount} failed=${response.body.failedCount}`,
-    "success",
-  );
+  setFeedback(elements.retryQueueResult, `processed=${response.body.processedCount} settled=${response.body.settledCount} retried=${response.body.rescheduledCount} failed=${response.body.failedCount}`, "success");
   await loadState();
 });
 
 document.addEventListener("click", async (event) => {
-  const button = event.target.closest("button[data-action='dispute-settlement']");
-  if (!button) {
+  const target = event.target;
+  const selectCampaign = target.closest("[data-select-campaign]");
+  const selectPartner = target.closest("[data-select-partner]");
+  const selectSettlement = target.closest("[data-select-settlement]");
+  const selectAudit = target.closest("[data-select-audit]");
+  const campaignCheck = target.closest("[data-campaign-check]");
+  const settlementCheck = target.closest("[data-settlement-check]");
+  const auditCheck = target.closest("[data-audit-check]");
+
+  if (selectCampaign) {
+    state.selectedCampaignId = selectCampaign.dataset.selectCampaign;
+    renderCampaignTable();
+    return;
+  }
+  if (selectPartner) {
+    state.selectedPartnerId = selectPartner.dataset.selectPartner;
+    renderPartnerTable();
+    return;
+  }
+  if (selectSettlement) {
+    state.selectedSettlementId = selectSettlement.dataset.selectSettlement;
+    renderQueueTable();
+    return;
+  }
+  if (selectAudit) {
+    state.selectedAuditEventId = selectAudit.dataset.selectAudit;
+    renderAuditTable();
+    return;
+  }
+  if (campaignCheck) {
+    campaignCheck.checked ? state.selectedCampaignIds.add(campaignCheck.dataset.campaignCheck) : state.selectedCampaignIds.delete(campaignCheck.dataset.campaignCheck);
+    renderCampaignTable();
+    return;
+  }
+  if (settlementCheck) {
+    settlementCheck.checked ? state.selectedSettlementIds.add(settlementCheck.dataset.settlementCheck) : state.selectedSettlementIds.delete(settlementCheck.dataset.settlementCheck);
+    renderQueueTable();
+    return;
+  }
+  if (auditCheck) {
+    auditCheck.checked ? state.selectedAuditEventIds.add(auditCheck.dataset.auditCheck) : state.selectedAuditEventIds.delete(auditCheck.dataset.auditCheck);
+    renderAuditTable();
     return;
   }
 
-  const settlementId = button.dataset.settlementId;
-  if (!settlementId) {
+  const actionButton = target.closest("button[data-action]");
+  if (!actionButton) return;
+
+  if (actionButton.dataset.action === "receipt") {
+    const response = await api.post("/events/receipts", {
+      receiptId: actionButton.dataset.receiptId,
+      intentId: actionButton.dataset.intentId,
+      offerId: actionButton.dataset.offerId,
+      campaignId: actionButton.dataset.campaignId,
+      partnerId: actionButton.dataset.partnerId,
+      eventType: "shortlisted",
+      occurredAt: new Date().toISOString(),
+      signature: "sig_ui_demo",
+    });
+    const settlement = response.body.settlement;
+    setFeedback(
+      elements.opportunityResult,
+      response.body.deduplicated
+        ? "回执命中幂等键，未重复写入。"
+        : settlement
+          ? `已创建 settlement ${settlement.settlementId}，金额 ${currency.format(settlement.amount)}`
+          : "回执已记录，但当前计费模型不会在 shortlisted 事件结算。",
+      response.body.deduplicated ? "info" : settlement ? "success" : "info",
+    );
+    await loadState();
     return;
   }
 
-  const response = await api.post(`/settlements/${settlementId}/dispute`, {});
-  if (!response.ok) {
-    setFeedback(elements.retryQueueResult, `Dispute 失败: HTTP ${response.status}`, "error");
+  if (actionButton.dataset.action === "dispute-settlement") {
+    const response = await api.post(`/settlements/${actionButton.dataset.settlementId}/dispute`, {});
+    if (!response.ok) {
+      setFeedback(elements.queueBatchFeedback, `Dispute 失败: HTTP ${response.status}`, "error");
+      return;
+    }
+    setFeedback(elements.queueBatchFeedback, `Settlement ${actionButton.dataset.settlementId} 已标记为 disputed。`, "success");
+    await loadState();
     return;
   }
 
-  setFeedback(elements.retryQueueResult, `Settlement ${settlementId} 已标记为 disputed。`, "success");
-  await loadState();
-});
-
-document.addEventListener("click", async (event) => {
-  const button = event.target.closest("button[data-action='receipt']");
-  if (!button) {
-    return;
+  if (actionButton.dataset.campaignId) {
+    const response = await api.post(`/campaigns/${actionButton.dataset.campaignId}/${actionButton.dataset.action}`, {});
+    if (!response.ok && response.status !== 409) {
+      setFeedback(elements.campaignFormResult, `${actionButton.dataset.action} 失败: HTTP ${response.status}`, "error");
+      return;
+    }
+    state.selectedCampaignId = actionButton.dataset.campaignId;
+    setFeedback(elements.campaignFormResult, `Campaign ${actionButton.dataset.campaignId} 已执行 ${actionButton.dataset.action}。`, "success");
+    await loadState();
   }
-
-  const payload = {
-    receiptId: button.dataset.receiptId,
-    intentId: button.dataset.intentId,
-    offerId: button.dataset.offerId,
-    campaignId: button.dataset.campaignId,
-    partnerId: button.dataset.partnerId,
-    eventType: "shortlisted",
-    occurredAt: new Date().toISOString(),
-    signature: "sig_ui_demo",
-  };
-
-  const response = await api.post("/events/receipts", payload);
-  if (!response.ok) {
-    setFeedback(elements.opportunityResult, `回执失败: HTTP ${response.status}`, "error");
-    return;
-  }
-
-  const settlement = response.body.settlement;
-  setFeedback(
-    elements.opportunityResult,
-    response.body.deduplicated
-      ? `回执命中幂等键，未重复写入。`
-      : settlement
-      ? `已创建 settlement ${settlement.settlementId}，金额 ${currency.format(settlement.amount)}`
-      : "回执已记录，但当前计费模型不会在 shortlisted 事件结算。",
-    response.body.deduplicated ? "info" : settlement ? "success" : "info",
-  );
-  await loadState();
 });
 
 loadState().catch((error) => {

@@ -29,10 +29,20 @@ export const buildServer = (store: PromotionAgentStore = createStore()) => {
   });
 
   app.get("/", async (_request, reply) => sendPublicAsset(reply, "index.html", "text/html; charset=utf-8"));
+  app.get("/agents", async (_request, reply) => sendPublicAsset(reply, "agents.html", "text/html; charset=utf-8"));
+  app.get("/agents/:leadId", async (_request, reply) => sendPublicAsset(reply, "agent-detail.html", "text/html; charset=utf-8"));
+  app.get("/measurement", async (_request, reply) => sendPublicAsset(reply, "measurement.html", "text/html; charset=utf-8"));
+  app.get("/risk", async (_request, reply) => sendPublicAsset(reply, "risk.html", "text/html; charset=utf-8"));
+  app.get("/evidence", async (_request, reply) => sendPublicAsset(reply, "evidence.html", "text/html; charset=utf-8"));
   app.get("/audit.html", async (_request, reply) => sendPublicAsset(reply, "audit.html", "text/html; charset=utf-8"));
   app.get("/dlq.html", async (_request, reply) => sendPublicAsset(reply, "dlq.html", "text/html; charset=utf-8"));
   app.get("/styles.css", async (_request, reply) => sendPublicAsset(reply, "styles.css", "text/css; charset=utf-8"));
   app.get("/app.js", async (_request, reply) => sendPublicAsset(reply, "app.js", "application/javascript; charset=utf-8"));
+  app.get("/agents.js", async (_request, reply) => sendPublicAsset(reply, "agents.js", "application/javascript; charset=utf-8"));
+  app.get("/agent-detail.js", async (_request, reply) => sendPublicAsset(reply, "agent-detail.js", "application/javascript; charset=utf-8"));
+  app.get("/measurement.js", async (_request, reply) => sendPublicAsset(reply, "measurement.js", "application/javascript; charset=utf-8"));
+  app.get("/risk.js", async (_request, reply) => sendPublicAsset(reply, "risk.js", "application/javascript; charset=utf-8"));
+  app.get("/evidence.js", async (_request, reply) => sendPublicAsset(reply, "evidence.js", "application/javascript; charset=utf-8"));
   app.get("/audit.js", async (_request, reply) => sendPublicAsset(reply, "audit.js", "application/javascript; charset=utf-8"));
   app.get("/dlq.js", async (_request, reply) => sendPublicAsset(reply, "dlq.js", "application/javascript; charset=utf-8"));
   app.get("/favicon.svg", async (_request, reply) => sendPublicAsset(reply, "favicon.svg", "image/svg+xml; charset=utf-8"));
@@ -44,8 +54,148 @@ export const buildServer = (store: PromotionAgentStore = createStore()) => {
   }));
 
   app.get("/agents/leads", async () => store.listLeads());
+  app.get("/discovery/sources", async () => store.listDiscoverySources());
+  app.post("/discovery/sources", async (request, reply) => {
+    const result = await store.createDiscoverySource(request.body as never);
+    return reply.code(201).send(result);
+  });
+  app.get("/discovery/runs", async () => store.listDiscoveryRuns());
+  app.post("/discovery/runs", async (request, reply) => {
+    const body = (request.body as { sourceId?: string } | undefined) ?? {};
+    if (!body.sourceId) {
+      return reply.code(400).send({
+        message: "sourceId is required.",
+      });
+    }
+    const run = await store.runDiscovery(body.sourceId);
+    if (!run) {
+      return reply.code(404).send({
+        message: "Discovery source not found.",
+      });
+    }
+    return reply.code(201).send(run);
+  });
+  app.get("/agent-leads", async (request) => {
+    const query = request.query as {
+      status?: string;
+      sourceType?: string;
+      dataOrigin?: string;
+      vertical?: string;
+      geo?: string;
+      owner?: string;
+      hasMissingFields?: string;
+    };
+    return store.listAgentLeads({
+      status: query.status,
+      sourceType: query.sourceType,
+      dataOrigin: query.dataOrigin,
+      vertical: query.vertical,
+      geo: query.geo,
+      owner: query.owner,
+      hasMissingFields: query.hasMissingFields ? query.hasMissingFields === "true" : undefined,
+    });
+  });
+  app.get("/agent-leads/:leadId", async (request, reply) => {
+    const { leadId } = request.params as { leadId: string };
+    const lead = await store.getLead(leadId);
+    if (!lead) {
+      return reply.code(404).send({ message: "Lead not found." });
+    }
+    return lead;
+  });
+  app.post("/agent-leads/:leadId/assign", async (request, reply) => {
+    const { leadId } = request.params as { leadId: string };
+    const body = (request.body as { ownerId?: string } | undefined) ?? {};
+    if (!body.ownerId) {
+      return reply.code(400).send({ message: "ownerId is required." });
+    }
+    const lead = await store.assignLead(leadId, body.ownerId);
+    if (!lead) return reply.code(404).send({ message: "Lead not found." });
+    return lead;
+  });
+  app.post("/agent-leads/:leadId/status", async (request, reply) => {
+    const { leadId } = request.params as { leadId: string };
+    const body = (request.body as {
+      nextStatus?: string;
+      actorId?: string;
+      comment?: string;
+      checklist?: Record<string, boolean>;
+    } | undefined) ?? {};
+    if (!body.nextStatus || !body.actorId || !body.comment || !body.checklist) {
+      return reply.code(400).send({ message: "nextStatus, actorId, comment, checklist are required." });
+    }
+    const result = await store.updateLeadStatus(
+      leadId,
+      body.nextStatus as never,
+      body.actorId,
+      body.comment,
+      body.checklist as never,
+    );
+    if (!result) return reply.code(404).send({ message: "Lead not found." });
+    if (!result.ok) return reply.code(409).send(result);
+    return result;
+  });
+  app.get("/agent-leads/:leadId/verification-history", async (request) => {
+    const { leadId } = request.params as { leadId: string };
+    return store.listVerificationHistory(leadId);
+  });
   app.get("/partners", async () => store.listPartners());
   app.get("/campaigns", async () => store.listCampaigns());
+  app.get("/measurements/funnel", async (request) => {
+    const query = request.query as Record<string, string>;
+    return store.getMeasurementFunnel(query as never);
+  });
+  app.get("/measurements/attribution", async (request) => {
+    const query = request.query as Record<string, string>;
+    return store.getAttributionRows(query as never);
+  });
+  app.get("/billing/drafts", async () => store.getBillingDrafts());
+  app.get("/evidence/assets", async () => store.listEvidenceAssets());
+  app.post("/evidence/assets", async (request, reply) => {
+    const asset = await store.createEvidenceAsset(request.body as never);
+    return reply.code(201).send(asset);
+  });
+  app.get("/risk/cases", async (request) => {
+    const query = request.query as {
+      status?: string;
+      severity?: string;
+      entityType?: string;
+      ownerId?: string;
+      dateFrom?: string;
+      dateTo?: string;
+    };
+    return store.listRiskCases(query);
+  });
+  app.post("/risk/cases", async (request, reply) => {
+    const riskCase = await store.createRiskCase(request.body as never);
+    return reply.code(201).send(riskCase);
+  });
+  app.post("/risk/cases/:caseId/status", async (request, reply) => {
+    const { caseId } = request.params as { caseId: string };
+    const body = (request.body as { status?: string; ownerId?: string; note?: string } | undefined) ?? {};
+    if (!body.status) {
+      return reply.code(400).send({ message: "status is required." });
+    }
+    const riskCase = await store.updateRiskCaseStatus(caseId, body.status as never, body.ownerId, body.note);
+    if (!riskCase) return reply.code(404).send({ message: "Risk case not found." });
+    return riskCase;
+  });
+  app.get("/reputation/records", async () => store.listReputationRecords());
+  app.get("/appeals", async () => store.listAppeals());
+  app.post("/appeals", async (request, reply) => {
+    const appeal = await store.createAppeal(request.body as never);
+    return reply.code(201).send(appeal);
+  });
+  app.post("/appeals/:appealId/decision", async (request, reply) => {
+    const { appealId } = request.params as { appealId: string };
+    const body = (request.body as { status?: string; decisionNote?: string } | undefined) ?? {};
+    if (!body.status || !body.decisionNote) {
+      return reply.code(400).send({ message: "status and decisionNote are required." });
+    }
+    const appeal = await store.decideAppeal(appealId, body.status as never, body.decisionNote);
+    if (!appeal) return reply.code(404).send({ message: "Appeal not found." });
+    return appeal;
+  });
   app.get("/policy-checks", async () => store.listPolicyChecks());
   app.get("/settlements", async () => store.listSettlements());
   app.get("/settlements/retry-jobs", async (request) => {

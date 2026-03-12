@@ -1,3 +1,5 @@
+import http from "node:http";
+
 import { describe, expect, it } from "vitest";
 
 import { buildServer } from "../src/server.js";
@@ -559,6 +561,260 @@ describe("promotion-agent MVP flow", () => {
     });
     expect(dlqAfterReplay.json().items[0].status).toBe("resolved");
 
+    await app.close();
+  });
+
+  it("creates discovery sources and crawls live pages into deduped agent leads", async () => {
+    const htmlServer = http.createServer((_request, response) => {
+      response.writeHead(200, { "content-type": "text/html" });
+      response.end(`
+        <html>
+          <head><title>NovaProcure Agent</title></head>
+          <body>
+            <h1>NovaProcure Agent</h1>
+            <p>CRM procurement agent with sponsored disclosure, oauth and api key support.</p>
+            <a href="https://nova.example.com/opportunities">Opportunities API</a>
+            <p>Contact: ops@nova.example.com</p>
+          </body>
+        </html>
+      `);
+    });
+    await new Promise<void>((resolve) => htmlServer.listen(0, "127.0.0.1", () => resolve()));
+    const address = htmlServer.address();
+    const baseUrl = `http://127.0.0.1:${typeof address === "string" ? 0 : address?.port}`;
+
+    const app = buildServer(createStore());
+    const source = await app.inject({
+      method: "POST",
+      url: "/discovery/sources",
+      payload: {
+        sourceType: "public_registry",
+        name: "Nova Registry",
+        baseUrl,
+        seedUrls: [baseUrl],
+        active: true,
+        crawlPolicy: { rateLimit: 1, maxDepth: 1 },
+        verticalHints: ["crm_software"],
+        geoHints: ["UK"],
+      },
+    });
+
+    const firstRun = await app.inject({
+      method: "POST",
+      url: "/discovery/runs",
+      payload: {
+        sourceId: source.json().sourceId,
+      },
+    });
+    expect(firstRun.statusCode).toBe(201);
+    expect(firstRun.json().createdLeadCount).toBeGreaterThan(0);
+
+    const secondRun = await app.inject({
+      method: "POST",
+      url: "/discovery/runs",
+      payload: {
+        sourceId: source.json().sourceId,
+      },
+    });
+    expect(secondRun.json().dedupedCount).toBeGreaterThan(0);
+
+    const leads = await app.inject({
+      method: "GET",
+      url: "/agent-leads?sourceType=public_registry",
+    });
+    expect(leads.json().some((lead: { providerOrg: string }) => lead.providerOrg.includes("NovaProcure"))).toBe(true);
+
+    await app.close();
+    await new Promise<void>((resolve, reject) => htmlServer.close((error) => (error ? reject(error) : resolve())));
+  });
+
+  it("separates discovered leads from seed leads in CRM filters", async () => {
+    const htmlServer = http.createServer((_request, response) => {
+      response.writeHead(200, { "content-type": "text/html" });
+      response.end(`
+        <html>
+          <head><title>Atlas Revenue Agent</title></head>
+          <body>
+            <h1>Atlas Revenue Agent</h1>
+            <p>CRM workflow agent with sponsored disclosure and oauth support.</p>
+            <a href="https://atlas.example.com/opportunities">Opportunities API</a>
+            <p>Contact: team@atlas.example.com</p>
+          </body>
+        </html>
+      `);
+    });
+    await new Promise<void>((resolve) => htmlServer.listen(0, "127.0.0.1", () => resolve()));
+    const address = htmlServer.address();
+    const baseUrl = `http://127.0.0.1:${typeof address === "string" ? 0 : address?.port}`;
+
+    const app = buildServer(createStore());
+    const source = await app.inject({
+      method: "POST",
+      url: "/discovery/sources",
+      payload: {
+        sourceType: "partner_directory",
+        name: "Atlas Directory",
+        baseUrl,
+        seedUrls: [baseUrl],
+        active: true,
+        crawlPolicy: { rateLimit: 1, maxDepth: 1 },
+        verticalHints: ["crm_software"],
+        geoHints: ["US"],
+      },
+    });
+
+    await app.inject({
+      method: "POST",
+      url: "/discovery/runs",
+      payload: {
+        sourceId: source.json().sourceId,
+      },
+    });
+
+    const discovered = await app.inject({
+      method: "GET",
+      url: "/agent-leads?dataOrigin=discovered",
+    });
+    expect(discovered.statusCode).toBe(200);
+    expect(discovered.json().every((lead: { dataOrigin: string }) => lead.dataOrigin === "discovered")).toBe(true);
+    expect(discovered.json().some((lead: { providerOrg: string }) => lead.providerOrg.includes("Atlas Revenue Agent"))).toBe(true);
+
+    const seed = await app.inject({
+      method: "GET",
+      url: "/agent-leads?dataOrigin=seed",
+    });
+    expect(seed.statusCode).toBe(200);
+    expect(seed.json().every((lead: { dataOrigin: string }) => lead.dataOrigin === "seed")).toBe(true);
+    expect(seed.json().some((lead: { providerOrg: string }) => lead.providerOrg === "ProcurePilot")).toBe(true);
+
+    await app.close();
+    await new Promise<void>((resolve, reject) => htmlServer.close((error) => (error ? reject(error) : resolve())));
+  });
+
+  it("blocks lead activation when verification checklist is incomplete", async () => {
+    const app = buildServer(createStore());
+
+    const result = await app.inject({
+      method: "POST",
+      url: "/agent-leads/lead_crm_eu/status",
+      payload: {
+        nextStatus: "active",
+        actorId: "ops:test",
+        comment: "Trying to activate without full checklist.",
+        checklist: {
+          identity: true,
+          auth: false,
+          disclosure: true,
+          sla: true,
+          rateLimit: true,
+        },
+      },
+    });
+
+    expect(result.statusCode).toBe(409);
+    expect(result.json().message).toContain("Checklist");
+    await app.close();
+  });
+
+  it("aggregates measurement funnel for full event chain", async () => {
+    const app = buildServer(createStore());
+    const receiptPayloads = [
+      { receiptId: "rcpt_funnel_01", eventType: "shortlisted" },
+      { receiptId: "rcpt_funnel_02", eventType: "shown" },
+      { receiptId: "rcpt_funnel_03", eventType: "detail_view" },
+      { receiptId: "rcpt_funnel_04", eventType: "handoff" },
+      { receiptId: "rcpt_funnel_05", eventType: "conversion" },
+    ];
+
+    for (const payload of receiptPayloads) {
+      await app.inject({
+        method: "POST",
+        url: "/events/receipts",
+        payload: {
+          ...payload,
+          intentId: "int_measurement_01",
+          offerId: "offer_hubflow",
+          campaignId: "cmp_hubflow",
+          partnerId: "partner_procure_pilot",
+          occurredAt: "2026-03-11T11:00:00.000Z",
+          signature: "sig_measurement",
+        },
+      });
+    }
+
+    const funnel = await app.inject({
+      method: "GET",
+      url: "/measurements/funnel?campaignId=cmp_hubflow",
+    });
+    expect(funnel.statusCode).toBe(200);
+    expect(funnel.json().shortlisted).toBeGreaterThan(0);
+    expect(funnel.json().detailViewRate).toBeGreaterThan(0);
+    expect(funnel.json().actionConversionRate).toBeGreaterThan(0);
+
+    await app.close();
+  });
+
+  it("creates risk cases and updates reputation dispute state through appeals", async () => {
+    const app = buildServer(createStore());
+
+    const riskCase = await app.inject({
+      method: "POST",
+      url: "/risk/cases",
+      payload: {
+        entityType: "partner",
+        entityId: "partner_procure_pilot",
+        reasonType: "claim_mismatch",
+        severity: "high",
+        ownerId: "risk:test",
+        note: "Testing risk flow.",
+      },
+    });
+    expect(riskCase.statusCode).toBe(201);
+
+    const reputationBefore = await app.inject({
+      method: "GET",
+      url: "/reputation/records",
+    });
+    const targetRecord = reputationBefore.json()[0];
+
+    const appeal = await app.inject({
+      method: "POST",
+      url: "/appeals",
+      payload: {
+        partnerId: targetRecord.partnerId,
+        targetRecordId: targetRecord.recordId,
+        statement: "Please review this manual adjustment.",
+      },
+    });
+    expect(appeal.statusCode).toBe(201);
+
+    await app.inject({
+      method: "POST",
+      url: `/appeals/${appeal.json().appealId}/decision`,
+      payload: {
+        status: "approved",
+        decisionNote: "Appeal accepted.",
+      },
+    });
+
+    const reputationAfter = await app.inject({
+      method: "GET",
+      url: "/reputation/records",
+    });
+    expect(reputationAfter.json().some((record: { disputeStatus: string }) => record.disputeStatus === "resolved")).toBe(true);
+
+    await app.close();
+  });
+
+  it("serves new product pages for CRM, measurement, risk, and evidence", async () => {
+    const app = buildServer(createStore());
+    for (const url of ["/agents", "/measurement", "/risk", "/evidence"]) {
+      const response = await app.inject({
+        method: "GET",
+        url,
+      });
+      expect(response.statusCode).toBe(200);
+    }
     await app.close();
   });
 
