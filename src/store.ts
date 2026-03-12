@@ -572,6 +572,7 @@ type CreateStoreOptions = Partial<{
   repository: PromotionAgentRepository;
   hotState: HotStateStore;
   settlementGateway: SettlementGateway;
+  seedData: SeedData;
 }>;
 
 export class PromotionAgentStore {
@@ -1916,7 +1917,7 @@ export class PromotionAgentStore {
 
 export const createStore = (options: CreateStoreOptions = {}) =>
   new PromotionAgentStore(
-    options.repository ?? new InMemoryPromotionAgentRepository(buildSeedData()),
+    options.repository ?? new InMemoryPromotionAgentRepository(options.seedData ?? buildSeedData()),
     options.hotState ?? new InMemoryHotStateStore(),
     options.settlementGateway ?? new SimulatedSettlementGateway(),
   );

@@ -23,10 +23,14 @@ const sendPublicAsset = async (reply: { type: (contentType: string) => { send: (
   return reply.type(contentType).send(body);
 };
 
-export const buildServer = (store: PromotionAgentStore = createStore()) => {
+export const buildServer = (
+  store: PromotionAgentStore = createStore(),
+  options: { appMode?: "default" | "demo" } = {},
+) => {
   const app = Fastify({
     logger: false,
   });
+  const appMode = options.appMode ?? "default";
 
   app.get("/", async (_request, reply) => sendPublicAsset(reply, "index.html", "text/html; charset=utf-8"));
   app.get("/agents", async (_request, reply) => sendPublicAsset(reply, "agents.html", "text/html; charset=utf-8"));
@@ -37,6 +41,10 @@ export const buildServer = (store: PromotionAgentStore = createStore()) => {
   app.get("/audit.html", async (_request, reply) => sendPublicAsset(reply, "audit.html", "text/html; charset=utf-8"));
   app.get("/dlq.html", async (_request, reply) => sendPublicAsset(reply, "dlq.html", "text/html; charset=utf-8"));
   app.get("/styles.css", async (_request, reply) => sendPublicAsset(reply, "styles.css", "text/css; charset=utf-8"));
+  app.get("/app-config.js", async (_request, reply) =>
+    reply
+      .type("application/javascript; charset=utf-8")
+      .send(`window.__PROMOTION_AGENT_CONFIG__ = ${JSON.stringify({ mode: appMode })};`));
   app.get("/app.js", async (_request, reply) => sendPublicAsset(reply, "app.js", "application/javascript; charset=utf-8"));
   app.get("/agents.js", async (_request, reply) => sendPublicAsset(reply, "agents.js", "application/javascript; charset=utf-8"));
   app.get("/agent-detail.js", async (_request, reply) => sendPublicAsset(reply, "agent-detail.js", "application/javascript; charset=utf-8"));
