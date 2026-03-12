@@ -54,6 +54,10 @@ Server starts on `http://localhost:3000`.
 
 For a stable stakeholder demo with virtual data and isolated in-memory state:
 
+Hosted demo:
+
+- https://promotion-agent-demo.vercel.app
+
 ```bash
 pnpm start:demo
 ```
