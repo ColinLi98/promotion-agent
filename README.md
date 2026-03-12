@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/ColinLi98/promotion-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/ColinLi98/promotion-agent/actions/workflows/ci.yml)
 
+Demo: [https://promotion-agent-demo.vercel.app](https://promotion-agent-demo.vercel.app)
+
 Backend-first MVP scaffold for the PRD in [Promotion_Agent_PRD_v0.9.docx](./Promotion_Agent_PRD_v0.9.docx).
 
 ## What is implemented
