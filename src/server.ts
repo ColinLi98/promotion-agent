@@ -5,44 +5,142 @@ import { fileURLToPath } from "node:url";
 import Fastify from "fastify";
 
 import {
+  type AppMode,
   AuditEntityTypeSchema,
   CampaignDraftInputSchema,
   EventReceiptSchema,
+  OnboardingTaskInputSchema,
   OpportunityRequestSchema,
+  OutreachTargetInputSchema,
+  RecruitmentPipelineUpdateSchema,
   SettlementDeadLetterStatusSchema,
   SettlementRetryJobStatusSchema,
+  type SystemRuntimeProfile,
 } from "./domain.js";
+import { StripeTopUpProvider } from "./payment-provider.js";
 import { createStore, PromotionAgentStore } from "./store.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const publicDir = path.resolve(__dirname, "../public");
+const transparentGif = Buffer.from("R0lGODlhAQABAIABAP///wAAACwAAAAAAQABAAACAkQBADs=", "base64");
 
 const sendPublicAsset = async (reply: { type: (contentType: string) => { send: (body: string) => unknown } }, fileName: string, contentType: string) => {
   const body = await readFile(path.join(publicDir, fileName), "utf8");
   return reply.type(contentType).send(body);
 };
 
-export const buildServer = (store: PromotionAgentStore = createStore()) => {
+const buildBaseUrl = (request: { protocol: string; headers: Record<string, string | string[] | undefined> }) => {
+  const origin = request.headers.origin;
+  if (typeof origin === "string" && origin.trim()) {
+    return origin;
+  }
+  const host = request.headers.host;
+  if (!host || Array.isArray(host)) {
+    throw new Error("Request host header is required to build checkout URLs.");
+  }
+  return `${request.protocol}://${host}`;
+};
+
+export const buildServer = (
+  store: PromotionAgentStore = createStore(),
+  options: { appMode?: AppMode; runtimeProfile?: SystemRuntimeProfile } = {},
+) => {
   const app = Fastify({
     logger: false,
+  });
+  const runtimeProfile =
+    options.runtimeProfile ?? {
+      mode: options.appMode ?? "default",
+      persistence: "memory",
+      hotState: "memory",
+      billingMode: "simulated",
+      demoEnabled: false,
+      realDataOnly: false,
+      defaultLeadFilter: store.getDefaultLeadFilter(),
+    };
+  const stripeProvider = process.env.STRIPE_SECRET_KEY
+    ? new StripeTopUpProvider({
+        secretKey: process.env.STRIPE_SECRET_KEY,
+        pricePerCreditCents: Number(process.env.STRIPE_PRICE_PER_CREDIT_CENTS ?? "100"),
+        currency: process.env.STRIPE_CURRENCY ?? "usd",
+        productName: process.env.STRIPE_TOP_UP_PRODUCT_NAME ?? "Promotion Agent Credits",
+      })
+    : null;
+  const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  app.register(async (webhookApp) => {
+    webhookApp.addContentTypeParser("application/json", { parseAs: "buffer" }, (_request, body, done) => {
+      done(null, body);
+    });
+
+    webhookApp.post("/webhooks/stripe", async (request, reply) => {
+      if (!stripeProvider || !stripeWebhookSecret) {
+        return reply.code(503).send({ message: "Stripe webhook is not configured." });
+      }
+
+      const signature = request.headers["stripe-signature"];
+      if (typeof signature !== "string" || !signature) {
+        return reply.code(400).send({ message: "stripe-signature header is required." });
+      }
+
+      try {
+        const event = stripeProvider.verifyCheckoutWebhookEvent(
+          request.body as Buffer,
+          signature,
+          stripeWebhookSecret,
+        );
+
+        if (event.type !== "checkout.session.completed") {
+          return reply.code(200).send({ received: true, ignored: true, type: event.type });
+        }
+
+        if (!event.paid) {
+          return reply.code(202).send({ received: true, paid: false });
+        }
+
+        const existingEntry = (await store.listCreditLedgerEntries(event.workspaceId)).find((entry) => entry.source === event.source);
+        if (!existingEntry) {
+          await store.topUpWorkspaceCredits(event.workspaceId, event.credits, event.source);
+        }
+
+        return reply.code(200).send({ received: true, paid: true, workspaceId: event.workspaceId });
+      } catch (error) {
+        return reply.code(400).send({
+          message: error instanceof Error ? error.message : "Stripe webhook verification failed.",
+        });
+      }
+    });
   });
 
   app.get("/", async (_request, reply) => sendPublicAsset(reply, "index.html", "text/html; charset=utf-8"));
   app.get("/agents", async (_request, reply) => sendPublicAsset(reply, "agents.html", "text/html; charset=utf-8"));
+  app.get("/agents/pipeline", async (_request, reply) => sendPublicAsset(reply, "agents-pipeline.html", "text/html; charset=utf-8"));
   app.get("/agents/:leadId", async (_request, reply) => sendPublicAsset(reply, "agent-detail.html", "text/html; charset=utf-8"));
   app.get("/measurement", async (_request, reply) => sendPublicAsset(reply, "measurement.html", "text/html; charset=utf-8"));
   app.get("/risk", async (_request, reply) => sendPublicAsset(reply, "risk.html", "text/html; charset=utf-8"));
   app.get("/evidence", async (_request, reply) => sendPublicAsset(reply, "evidence.html", "text/html; charset=utf-8"));
+  app.get("/buyer-agents", async (_request, reply) => sendPublicAsset(reply, "buyer-agents.html", "text/html; charset=utf-8"));
+  app.get("/plans-wallet", async (_request, reply) => sendPublicAsset(reply, "plans-wallet.html", "text/html; charset=utf-8"));
+  app.get("/promotion-runs.html", async (_request, reply) => sendPublicAsset(reply, "promotion-runs.html", "text/html; charset=utf-8"));
   app.get("/audit.html", async (_request, reply) => sendPublicAsset(reply, "audit.html", "text/html; charset=utf-8"));
   app.get("/dlq.html", async (_request, reply) => sendPublicAsset(reply, "dlq.html", "text/html; charset=utf-8"));
   app.get("/styles.css", async (_request, reply) => sendPublicAsset(reply, "styles.css", "text/css; charset=utf-8"));
+  app.get("/app-config.js", async (_request, reply) =>
+    reply
+      .type("application/javascript; charset=utf-8")
+      .send(`window.__PROMOTION_AGENT_CONFIG__ = ${JSON.stringify(runtimeProfile)};`));
   app.get("/app.js", async (_request, reply) => sendPublicAsset(reply, "app.js", "application/javascript; charset=utf-8"));
   app.get("/agents.js", async (_request, reply) => sendPublicAsset(reply, "agents.js", "application/javascript; charset=utf-8"));
+  app.get("/agents-pipeline.js", async (_request, reply) => sendPublicAsset(reply, "agents-pipeline.js", "application/javascript; charset=utf-8"));
   app.get("/agent-detail.js", async (_request, reply) => sendPublicAsset(reply, "agent-detail.js", "application/javascript; charset=utf-8"));
   app.get("/measurement.js", async (_request, reply) => sendPublicAsset(reply, "measurement.js", "application/javascript; charset=utf-8"));
   app.get("/risk.js", async (_request, reply) => sendPublicAsset(reply, "risk.js", "application/javascript; charset=utf-8"));
   app.get("/evidence.js", async (_request, reply) => sendPublicAsset(reply, "evidence.js", "application/javascript; charset=utf-8"));
+  app.get("/buyer-agents.js", async (_request, reply) => sendPublicAsset(reply, "buyer-agents.js", "application/javascript; charset=utf-8"));
+  app.get("/drilldown-links.js", async (_request, reply) => sendPublicAsset(reply, "drilldown-links.js", "application/javascript; charset=utf-8"));
+  app.get("/plans-wallet.js", async (_request, reply) => sendPublicAsset(reply, "plans-wallet.js", "application/javascript; charset=utf-8"));
+  app.get("/promotion-runs.js", async (_request, reply) => sendPublicAsset(reply, "promotion-runs.js", "application/javascript; charset=utf-8"));
   app.get("/audit.js", async (_request, reply) => sendPublicAsset(reply, "audit.js", "application/javascript; charset=utf-8"));
   app.get("/dlq.js", async (_request, reply) => sendPublicAsset(reply, "dlq.js", "application/javascript; charset=utf-8"));
   app.get("/favicon.svg", async (_request, reply) => sendPublicAsset(reply, "favicon.svg", "image/svg+xml; charset=utf-8"));
@@ -52,6 +150,8 @@ export const buildServer = (store: PromotionAgentStore = createStore()) => {
     ok: true,
     service: "promotion-agent",
   }));
+
+  app.get("/system/runtime-profile", async () => runtimeProfile);
 
   app.get("/agents/leads", async () => store.listLeads());
   app.get("/discovery/sources", async () => store.listDiscoverySources());
@@ -80,6 +180,10 @@ export const buildServer = (store: PromotionAgentStore = createStore()) => {
       status?: string;
       sourceType?: string;
       dataOrigin?: string;
+      provenance?: string;
+      tier?: string;
+      isCommerciallyEligible?: string;
+      intentCoverage?: string;
       vertical?: string;
       geo?: string;
       owner?: string;
@@ -89,11 +193,256 @@ export const buildServer = (store: PromotionAgentStore = createStore()) => {
       status: query.status,
       sourceType: query.sourceType,
       dataOrigin: query.dataOrigin,
+      provenance: query.provenance,
+      tier: query.tier,
+      isCommerciallyEligible: query.isCommerciallyEligible ? query.isCommerciallyEligible === "true" : undefined,
+      intentCoverage: query.intentCoverage,
       vertical: query.vertical,
       geo: query.geo,
       owner: query.owner,
       hasMissingFields: query.hasMissingFields ? query.hasMissingFields === "true" : undefined,
     });
+  });
+  app.get("/buyer-agents/scorecards", async (request) => {
+    const query = request.query as {
+      tier?: string;
+      isCommerciallyEligible?: string;
+      intentCoverage?: string;
+      provenance?: string;
+    };
+    return store.listBuyerAgentScorecards({
+      tier: query.tier,
+      isCommerciallyEligible: query.isCommerciallyEligible ? query.isCommerciallyEligible === "true" : undefined,
+      intentCoverage: query.intentCoverage,
+      provenance: query.provenance,
+    });
+  });
+  app.get("/recruitment/pipelines", async (request) => {
+    const query = request.query as {
+      stage?: string;
+      ownerId?: string;
+      priority?: string;
+      leadId?: string;
+    };
+    return store.listRecruitmentPipelines({
+      stage: query.stage,
+      ownerId: query.ownerId,
+      priority: query.priority,
+      leadId: query.leadId,
+    });
+  });
+  app.get("/recruitment/pipelines/:pipelineId", async (request, reply) => {
+    const { pipelineId } = request.params as { pipelineId: string };
+    const pipeline = await store.getRecruitmentPipeline(pipelineId);
+    if (!pipeline) {
+      return reply.code(404).send({ message: "Recruitment pipeline not found." });
+    }
+    return pipeline;
+  });
+  app.post("/recruitment/pipelines/:pipelineId/stage", async (request, reply) => {
+    const { pipelineId } = request.params as { pipelineId: string };
+    const pipeline = await store.updateRecruitmentPipeline(pipelineId, RecruitmentPipelineUpdateSchema.parse(request.body));
+    if (!pipeline) {
+      return reply.code(404).send({ message: "Recruitment pipeline not found." });
+    }
+    return pipeline;
+  });
+  app.get("/recruitment/pipelines/:pipelineId/outreach-targets", async (request, reply) => {
+    const { pipelineId } = request.params as { pipelineId: string };
+    const pipeline = await store.getRecruitmentPipeline(pipelineId);
+    if (!pipeline) return reply.code(404).send({ message: "Recruitment pipeline not found." });
+    return store.listOutreachTargetsForPipeline(pipelineId);
+  });
+  app.post("/recruitment/pipelines/:pipelineId/outreach-targets", async (request, reply) => {
+    const { pipelineId } = request.params as { pipelineId: string };
+    const target = await store.createOutreachTargetForPipeline(pipelineId, OutreachTargetInputSchema.parse(request.body));
+    if (!target) return reply.code(404).send({ message: "Recruitment pipeline not found." });
+    return reply.code(201).send(target);
+  });
+  app.post("/outreach-targets/:targetId/status", async (request, reply) => {
+    const { targetId } = request.params as { targetId: string };
+    const body = (request.body as { status?: string; notes?: string | null } | undefined) ?? {};
+    if (!body.status) return reply.code(400).send({ message: "status is required." });
+    const target = await store.updateOutreachTargetStatus(targetId, body.status as never, body.notes);
+    if (!target) return reply.code(404).send({ message: "Outreach target not found." });
+    return target;
+  });
+  app.post("/outreach-targets/:targetId/send", async (request, reply) => {
+    const { targetId } = request.params as { targetId: string };
+    try {
+      const result = await store.sendOutreachTarget(targetId);
+      if (!result) return reply.code(404).send({ message: "Outreach target not found." });
+      return result;
+    } catch (error) {
+      return reply.code(409).send({
+        message: error instanceof Error ? error.message : "Outreach send failed.",
+      });
+    }
+  });
+  app.post("/outreach-targets/:targetId/open", async (request, reply) => {
+    const { targetId } = request.params as { targetId: string };
+    const body = (request.body as { source?: string } | undefined) ?? {};
+    const target = await store.recordOutreachOpen(targetId, body.source ?? "manual");
+    if (!target) return reply.code(404).send({ message: "Outreach target not found." });
+    return target;
+  });
+  app.get("/outreach/open/:targetId/pixel.gif", async (request, reply) => {
+    const { targetId } = request.params as { targetId: string };
+    await store.recordOutreachOpen(targetId, "tracking_pixel");
+    return reply.type("image/gif").send(transparentGif);
+  });
+  app.get("/recruitment/pipelines/:pipelineId/onboarding-tasks", async (request, reply) => {
+    const { pipelineId } = request.params as { pipelineId: string };
+    const pipeline = await store.getRecruitmentPipeline(pipelineId);
+    if (!pipeline) return reply.code(404).send({ message: "Recruitment pipeline not found." });
+    return store.listOnboardingTasksForPipeline(pipelineId);
+  });
+  app.post("/recruitment/pipelines/:pipelineId/onboarding-tasks", async (request, reply) => {
+    const { pipelineId } = request.params as { pipelineId: string };
+    const task = await store.createOnboardingTaskForPipeline(pipelineId, OnboardingTaskInputSchema.parse(request.body));
+    if (!task) return reply.code(404).send({ message: "Recruitment pipeline not found." });
+    return reply.code(201).send(task);
+  });
+  app.post("/onboarding-tasks/:taskId/status", async (request, reply) => {
+    const { taskId } = request.params as { taskId: string };
+    const body = (request.body as {
+      status?: string;
+      evidenceRef?: string | null;
+      notes?: string | null;
+    } | undefined) ?? {};
+    if (!body.status) return reply.code(400).send({ message: "status is required." });
+    const task = await store.updateOnboardingTaskStatus(taskId, body.status as never, {
+      evidenceRef: body.evidenceRef,
+      notes: body.notes,
+    });
+    if (!task) return reply.code(404).send({ message: "Onboarding task not found." });
+    return task;
+  });
+  app.post("/recruitment/tasks/process-due", async (request) => {
+    const body = (request.body as { referenceTime?: string } | undefined) ?? {};
+    return store.processDueRecruitmentTasks(body.referenceTime);
+  });
+  app.get("/recruitment/pipelines/:pipelineId/readiness", async (request, reply) => {
+    const { pipelineId } = request.params as { pipelineId: string };
+    const readiness = await store.getPartnerReadinessForPipeline(pipelineId);
+    if (!readiness) return reply.code(404).send({ message: "Partner readiness not found." });
+    return readiness;
+  });
+  app.get("/plans", async () => store.listPromotionPlans());
+  app.get("/wallet", async (request) => {
+    const query = request.query as { workspaceId?: string };
+    return store.getWorkspaceWallet(query.workspaceId);
+  });
+  app.get("/wallet/ledger", async (request) => {
+    const query = request.query as { workspaceId?: string };
+    return store.listCreditLedgerEntries(query.workspaceId);
+  });
+  app.post("/wallet/top-ups/checkout", async (request, reply) => {
+    const body = (request.body as { workspaceId?: string; credits?: number } | undefined) ?? {};
+    if (!body.credits || body.credits <= 0) {
+      return reply.code(400).send({ message: "credits must be a positive number." });
+    }
+    if (!stripeProvider) {
+      if (runtimeProfile.realDataOnly) {
+        return reply.code(503).send({ message: "Stripe is not configured for real_test top-ups." });
+      }
+      const wallet = await store.topUpWorkspaceCredits(body.workspaceId ?? undefined, body.credits);
+      return reply.code(201).send(wallet);
+    }
+
+    const workspaceId =
+      body.workspaceId ??
+      (runtimeProfile.mode === "demo"
+        ? "workspace_demo"
+        : runtimeProfile.mode === "real_test"
+          ? "workspace_real_test"
+          : "workspace_default");
+    const baseUrl = buildBaseUrl(request);
+    const session = await stripeProvider.createCheckoutSession({
+      workspaceId,
+      credits: body.credits,
+      successUrl: `${baseUrl}/plans-wallet?checkout=success&workspaceId=${encodeURIComponent(workspaceId)}&session_id={CHECKOUT_SESSION_ID}`,
+      cancelUrl: `${baseUrl}/plans-wallet?checkout=cancelled&workspaceId=${encodeURIComponent(workspaceId)}`,
+    });
+    return reply.code(201).send(session);
+  });
+  app.get("/wallet/top-ups/confirm", async (request, reply) => {
+    const query = request.query as { workspaceId?: string; sessionId?: string };
+    if (!query.sessionId) {
+      return reply.code(400).send({ message: "sessionId is required." });
+    }
+    if (!stripeProvider) {
+      return reply.code(503).send({ message: "Stripe is not configured." });
+    }
+
+    const confirmed = await stripeProvider.confirmCheckoutSession(query.sessionId);
+    const workspaceId = query.workspaceId ?? confirmed.workspaceId;
+    if (workspaceId !== confirmed.workspaceId) {
+      return reply.code(409).send({ message: "workspaceId does not match Stripe session metadata." });
+    }
+
+    if (!confirmed.paid) {
+      return reply.code(409).send({ message: "Stripe checkout session is not paid yet.", session: confirmed });
+    }
+
+    const existingEntry = (await store.listCreditLedgerEntries(workspaceId)).find((entry) => entry.source === confirmed.source);
+    const wallet = existingEntry
+      ? await store.getWorkspaceWallet(workspaceId)
+      : await store.topUpWorkspaceCredits(workspaceId, confirmed.credits, confirmed.source);
+
+    return reply.code(200).send({
+      confirmed: true,
+      session: confirmed,
+      wallet,
+    });
+  });
+  app.get("/promotion-runs", async (request) => {
+    const query = request.query as { workspaceId?: string };
+    return store.listPromotionRuns(query.workspaceId);
+  });
+  app.get("/promotion-runs/:promotionRunId/targets", async (request, reply) => {
+    const { promotionRunId } = request.params as { promotionRunId: string };
+    const run = await store.getPromotionRun(promotionRunId);
+    if (!run) {
+      return reply.code(404).send({ message: "Promotion run not found." });
+    }
+    return store.listPromotionRunTargets(promotionRunId);
+  });
+  app.post("/promotion-runs", async (request, reply) => {
+    const body = (request.body as {
+      workspaceId?: string;
+      campaignId?: string;
+      category?: string;
+      taskType?: string;
+      geo?: string[];
+      sponsoredSlots?: number;
+      disclosureRequired?: boolean;
+    } | undefined) ?? {};
+    if (!body.campaignId || !body.category || !body.taskType) {
+      return reply.code(400).send({ message: "campaignId, category, and taskType are required." });
+    }
+    const result = await store.createPromotionRun({
+      workspaceId: body.workspaceId,
+      campaignId: body.campaignId,
+      category: body.category,
+      taskType: body.taskType,
+      geo: body.geo,
+      sponsoredSlots: body.sponsoredSlots,
+      disclosureRequired: body.disclosureRequired,
+    });
+    return reply.code(201).send(result);
+  });
+  app.post("/promotion-runs/:promotionRunId/dispatch", async (request, reply) => {
+    const { promotionRunId } = request.params as { promotionRunId: string };
+    const result = await store.dispatchPromotionRun(promotionRunId);
+    if (!result) {
+      return reply.code(404).send({ message: "Promotion run not found." });
+    }
+    return result;
+  });
+  app.get("/delivery/metrics", async (request) => {
+    const query = request.query as { workspaceId?: string; promotionRunId?: string };
+    return store.getDeliveryMetrics(query.workspaceId, query.promotionRunId);
   });
   app.get("/agent-leads/:leadId", async (request, reply) => {
     const { leadId } = request.params as { leadId: string };
@@ -120,6 +469,7 @@ export const buildServer = (store: PromotionAgentStore = createStore()) => {
       actorId?: string;
       comment?: string;
       checklist?: Record<string, boolean>;
+      evidenceRef?: string | null;
     } | undefined) ?? {};
     if (!body.nextStatus || !body.actorId || !body.comment || !body.checklist) {
       return reply.code(400).send({ message: "nextStatus, actorId, comment, checklist are required." });
@@ -130,6 +480,7 @@ export const buildServer = (store: PromotionAgentStore = createStore()) => {
       body.actorId,
       body.comment,
       body.checklist as never,
+      body.evidenceRef,
     );
     if (!result) return reply.code(404).send({ message: "Lead not found." });
     if (!result.ok) return reply.code(409).send(result);
@@ -139,8 +490,52 @@ export const buildServer = (store: PromotionAgentStore = createStore()) => {
     const { leadId } = request.params as { leadId: string };
     return store.listVerificationHistory(leadId);
   });
-  app.get("/partners", async () => store.listPartners());
-  app.get("/campaigns", async () => store.listCampaigns());
+  app.post("/agent-leads/:leadId/promote", async (request, reply) => {
+    const { leadId } = request.params as { leadId: string };
+    const body = (request.body as {
+      partnerId?: string;
+      dataProvenance?: string;
+      status?: string;
+      supportedCategories?: string[];
+      slaTier?: string;
+      acceptsSponsored?: boolean;
+      supportsDisclosure?: boolean;
+      supportsDeliveryReceipt?: boolean;
+      supportsPresentationReceipt?: boolean;
+      authModes?: string[];
+    } | undefined) ?? {};
+
+    try {
+      const partner = await store.promoteLeadToPartner(leadId, {
+        partnerId: body.partnerId,
+        dataProvenance: body.dataProvenance as never,
+        status: body.status as never,
+        supportedCategories: body.supportedCategories,
+        slaTier: body.slaTier,
+        acceptsSponsored: body.acceptsSponsored,
+        supportsDisclosure: body.supportsDisclosure,
+        supportsDeliveryReceipt: body.supportsDeliveryReceipt,
+        supportsPresentationReceipt: body.supportsPresentationReceipt,
+        authModes: body.authModes,
+      });
+      if (!partner) {
+        return reply.code(404).send({ message: "Lead not found." });
+      }
+      return reply.code(201).send(partner);
+    } catch (error) {
+      return reply.code(409).send({
+        message: error instanceof Error ? error.message : "Lead could not be promoted to partner.",
+      });
+    }
+  });
+  app.get("/partners", async (request) => {
+    const query = request.query as { provenance?: string };
+    return store.listPartners({ provenance: query.provenance });
+  });
+  app.get("/campaigns", async (request) => {
+    const query = request.query as { provenance?: string };
+    return store.listCampaigns({ provenance: query.provenance });
+  });
   app.get("/measurements/funnel", async (request) => {
     const query = request.query as Record<string, string>;
     return store.getMeasurementFunnel(query as never);
@@ -150,7 +545,10 @@ export const buildServer = (store: PromotionAgentStore = createStore()) => {
     return store.getAttributionRows(query as never);
   });
   app.get("/billing/drafts", async () => store.getBillingDrafts());
-  app.get("/evidence/assets", async () => store.listEvidenceAssets());
+  app.get("/evidence/assets", async (request) => {
+    const query = request.query as { provenance?: string };
+    return store.listEvidenceAssets({ provenance: query.provenance });
+  });
   app.post("/evidence/assets", async (request, reply) => {
     const asset = await store.createEvidenceAsset(request.body as never);
     return reply.code(201).send(asset);
@@ -163,6 +561,7 @@ export const buildServer = (store: PromotionAgentStore = createStore()) => {
       ownerId?: string;
       dateFrom?: string;
       dateTo?: string;
+      provenance?: string;
     };
     return store.listRiskCases(query);
   });
@@ -197,7 +596,10 @@ export const buildServer = (store: PromotionAgentStore = createStore()) => {
     return appeal;
   });
   app.get("/policy-checks", async () => store.listPolicyChecks());
-  app.get("/settlements", async () => store.listSettlements());
+  app.get("/settlements", async (request) => {
+    const query = request.query as { provenance?: string };
+    return store.listSettlements({ provenance: query.provenance });
+  });
   app.get("/settlements/retry-jobs", async (request) => {
     const query = request.query as {
       status?: string;
@@ -236,6 +638,7 @@ export const buildServer = (store: PromotionAgentStore = createStore()) => {
       traceId?: string;
       entityId?: string;
       entityType?: string;
+      provenance?: string;
       page?: string;
       pageSize?: string;
     };
@@ -244,6 +647,7 @@ export const buildServer = (store: PromotionAgentStore = createStore()) => {
       traceId: query.traceId,
       entityId: query.entityId,
       entityType: query.entityType ? AuditEntityTypeSchema.parse(query.entityType) : undefined,
+      provenance: query.provenance,
       page: query.page ? Number(query.page) : undefined,
       pageSize: query.pageSize ? Number(query.pageSize) : undefined,
     });

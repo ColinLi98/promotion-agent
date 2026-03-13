@@ -4,6 +4,7 @@ const attributionBody = document.querySelector("#attributionBody");
 const attributionDetail = document.querySelector("#measurementDetail");
 const billingDraftBody = document.querySelector("#billingDraftBody");
 const billingDraftDetail = document.querySelector("#billingDraftDetail");
+const appConfig = window.__PROMOTION_AGENT_CONFIG__ ?? { mode: "default" };
 
 const state = {
   selectedAttributionKey: null,
@@ -32,6 +33,15 @@ const detailSection = (title, value) => `
   </section>
 `;
 
+const decorateEnvironment = () => {
+  const subtitle = document.querySelector(".brand-subtitle");
+  if (subtitle && !subtitle.querySelector("[data-environment-badge]")) {
+    const label = appConfig.mode === "demo" ? "Demo Environment" : appConfig.mode === "real_test" ? "Real Test Environment" : "Default Environment";
+    const tone = appConfig.mode === "demo" ? "reviewing" : appConfig.mode === "real_test" ? "active" : "draft";
+    subtitle.insertAdjacentHTML("beforeend", ` <span data-environment-badge="true" class="badge ${tone}">${escapeHtml(label)}</span>`);
+  }
+};
+
 const runtime = {
   funnel: null,
   attribution: [],
@@ -41,12 +51,12 @@ const runtime = {
 const renderFunnel = (funnel) => {
   funnelGrid.innerHTML = [
     ["Shortlisted", funnel.shortlisted],
-    ["Shown", funnel.shown],
-    ["Detail View", funnel.detailView],
-    ["Handoff", funnel.handoff],
-    ["Conversion", funnel.conversion],
-    ["Detail View Rate", `${(funnel.detailViewRate * 100).toFixed(1)}%`],
-    ["Handoff Rate", `${(funnel.handoffRate * 100).toFixed(1)}%`],
+    ["Presented", funnel.presented],
+    ["Viewed", funnel.detailView],
+    ["Interacted", funnel.handoff],
+    ["Converted", funnel.conversion],
+    ["Viewed Rate", `${(funnel.detailViewRate * 100).toFixed(1)}%`],
+    ["Interaction Rate", `${(funnel.handoffRate * 100).toFixed(1)}%`],
     ["Conversion Rate", `${(funnel.actionConversionRate * 100).toFixed(1)}%`],
   ]
     .map(([label, value]) => `<article class="list-card"><strong>${escapeHtml(label)}</strong><div class="status-stat">${escapeHtml(value)}</div></article>`)
@@ -86,12 +96,12 @@ const renderAttribution = () => {
     `)}
     ${detailSection("Performance", `
       <p class="meta-row">Shortlisted: ${selected.shortlisted}</p>
+      <p class="meta-row">Presented billable events: ${selected.billableEvents}</p>
       <p class="meta-row">Conversions: ${selected.conversions}</p>
-      <p class="meta-row">Billable Events: ${selected.billableEvents}</p>
       <p class="meta-row">Billed Amount: ${currency.format(selected.billedAmount)}</p>
     `)}
     ${detailSection("Context", `
-      <p class="meta-row">Funnel shortlists: ${runtime.funnel.shortlisted}</p>
+      <p class="meta-row">Funnel presented: ${runtime.funnel.presented}</p>
       <p class="meta-row">Action conversion rate: ${(runtime.funnel.actionConversionRate * 100).toFixed(1)}%</p>
     `)}
   `;
@@ -146,6 +156,7 @@ const render = () => {
 };
 
 const load = async () => {
+  decorateEnvironment();
   const data = new FormData(filterForm);
   const query = new URLSearchParams();
   for (const [key, value] of data.entries()) {

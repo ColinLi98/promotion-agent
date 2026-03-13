@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Promotion Agent - Buyer Agent Explorer</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="console-shell">
+      <aside class="sidebar">
+        <div class="sidebar-brand">
+          <div class="brand-mark">PA</div>
+          <div class="brand-copy">
+            <p class="brand-kicker">Promotion Agent</p>
+            <h1 class="brand-title">Buyer Agent Explorer</h1>
+            <p class="brand-subtitle">Commercial buyer-agent scoring, tiers, and intent coverage.</p>
+          </div>
+        </div>
+        <nav class="sidebar-nav">
+          <a class="sidebar-link" href="/"><span class="sidebar-link-label"><span class="sidebar-link-title">Workbench</span><span class="sidebar-link-meta">overview</span></span></a>
+          <a class="sidebar-link is-active" href="/buyer-agents"><span class="sidebar-link-label"><span class="sidebar-link-title">Buyer Agents</span><span class="sidebar-link-meta">scoring and tiers</span></span></a>
+          <a class="sidebar-link" href="/plans-wallet"><span class="sidebar-link-label"><span class="sidebar-link-title">Plans & Wallet</span><span class="sidebar-link-meta">credits and plans</span></span></a>
+          <a class="sidebar-link" href="/promotion-runs.html"><span class="sidebar-link-label"><span class="sidebar-link-title">Promotion Runs</span><span class="sidebar-link-meta">coverage and runs</span></span></a>
+        </nav>
+      </aside>
+      <div class="workspace">
+        <header class="topbar">
+          <div class="topbar-copy">
+            <p class="topbar-kicker">Buyer Agent Intelligence</p>
+            <h2 class="topbar-title">高价值 buyer agent 识别与分层</h2>
+            <p class="topbar-subtitle">看商业可用 buyer agent 的质量分、tier、intent coverage 和可投放资格。</p>
+          </div>
+        </header>
+        <main class="workspace-main">
+          <section class="panel panel-wide">
+            <form id="buyerAgentFilters" class="form-grid">
+              <label><span>Tier</span><select name="tier"><option value="">All</option><option value="A">A</option><option value="B">B</option><option value="C">C</option></select></label>
+              <label><span>Intent Coverage</span><input name="intentCoverage" placeholder="workflow_automation" /></label>
+              <label><span>Commercial</span><select name="isCommerciallyEligible"><option value="">All</option><option value="true">true</option><option value="false">false</option></select></label>
+              <div class="form-actions"><button type="submit" class="button button-primary">刷新</button></div>
+            </form>
+            <div class="split-layout">
+              <div class="data-table-wrap">
+                <table class="data-table data-table--sticky-first">
+                  <thead><tr><th>Buyer Agent</th><th>Tier</th><th>Score</th><th>Commercial</th><th>Coverage</th></tr></thead>
+                  <tbody id="buyerAgentBody"></tbody>
+                </table>
+              </div>
+              <aside id="buyerAgentDetail" class="detail-panel"></aside>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+    <script src="/app-config.js"></script>
+    <script type="module" src="/buyer-agents.js"></script>
+  </body>
+</html>

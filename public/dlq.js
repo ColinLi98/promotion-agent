@@ -14,6 +14,7 @@ const params = new URLSearchParams(window.location.search);
 let currentPage = Number(params.get("page") ?? "1");
 let selectedDlqEntryId = null;
 let currentPageData = null;
+const appConfig = window.__PROMOTION_AGENT_CONFIG__ ?? { mode: "default" };
 
 const escapeHtml = (value) =>
   String(value)
@@ -32,6 +33,15 @@ const detailSection = (title, value) => `
     <div class="detail-section-value">${value}</div>
   </section>
 `;
+
+const decorateEnvironment = () => {
+  const subtitle = document.querySelector(".brand-subtitle");
+  if (subtitle && !subtitle.querySelector("[data-environment-badge]")) {
+    const label = appConfig.mode === "demo" ? "Demo Environment" : appConfig.mode === "real_test" ? "Real Test Environment" : "Default Environment";
+    const tone = appConfig.mode === "demo" ? "reviewing" : appConfig.mode === "real_test" ? "active" : "draft";
+    subtitle.insertAdjacentHTML("beforeend", ` <span data-environment-badge="true" class="badge ${tone}">${escapeHtml(label)}</span>`);
+  }
+};
 
 const syncQueryToUrl = () => {
   const next = new URLSearchParams();
@@ -88,7 +98,7 @@ const render = () => {
   elements.dlqDetailPanel.innerHTML = `
     ${detailSection("DLQ Entry", `
       <h3 class="panel-title">${escapeHtml(selected.dlqEntryId)}</h3>
-      <p class="meta-row">${badge(selected.status)} ${badge(selected.reason)}</p>
+      <p class="meta-row">${badge(selected.status)} ${badge(selected.reason)} ${badge(selected.payload?.settlement?.dataProvenance ?? "ops_manual")}</p>
     `)}
     ${detailSection("Settlement Context", `
       <p class="meta-row">Settlement ${escapeHtml(selected.settlementId)}</p>
@@ -111,6 +121,7 @@ const render = () => {
 };
 
 const loadDlq = async () => {
+  decorateEnvironment();
   syncQueryToUrl();
   const query = new URLSearchParams({
     page: String(currentPage),

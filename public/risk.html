@@ -37,6 +37,7 @@
             <p class="topbar-subtitle">把风险处理从零散备注升级成标准化案件流、信誉流和申诉流。</p>
           </div>
           <div class="topbar-actions">
+            <div id="sourceBacklink"></div>
             <a class="button button-subtle" href="/">返回主控台</a>
           </div>
         </header>
@@ -94,11 +95,15 @@
               <label class="span-2"><span>Statement</span><input name="statement" value="Requesting operator review." required /></label>
               <div class="form-actions span-2"><button type="submit" class="button button-primary">提交 Appeal</button><span id="appealFeedback" class="inline-feedback"></span></div>
             </form>
-            <div class="data-table-wrap"><table class="data-table data-table--sticky-first"><thead><tr><th>Appeal</th><th>Partner</th><th>Status</th><th>Opened</th></tr></thead><tbody id="appealBody"></tbody></table></div>
+            <div class="split-layout">
+              <div class="data-table-wrap"><table class="data-table data-table--sticky-first"><thead><tr><th>Appeal</th><th>Partner</th><th>Status</th><th>Opened</th></tr></thead><tbody id="appealBody"></tbody></table></div>
+              <aside id="appealDetailPanel" class="detail-panel"></aside>
+            </div>
           </section>
         </main>
       </div>
     </div>
+    <script src="/app-config.js"></script>
     <script type="module" src="/risk.js"></script>
   </body>
 </html>

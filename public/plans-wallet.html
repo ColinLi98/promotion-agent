@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Promotion Agent - Plans & Wallet</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="console-shell">
+      <aside class="sidebar">
+        <div class="sidebar-brand">
+          <div class="brand-mark">PA</div>
+          <div class="brand-copy">
+            <p class="brand-kicker">Promotion Agent</p>
+            <h1 class="brand-title">Plans & Wallet</h1>
+            <p class="brand-subtitle">Credits, plan limits, and wallet ledger.</p>
+          </div>
+        </div>
+        <nav class="sidebar-nav">
+          <a class="sidebar-link" href="/"><span class="sidebar-link-label"><span class="sidebar-link-title">Workbench</span><span class="sidebar-link-meta">overview</span></span></a>
+          <a class="sidebar-link" href="/buyer-agents"><span class="sidebar-link-label"><span class="sidebar-link-title">Buyer Agents</span><span class="sidebar-link-meta">scoring and tiers</span></span></a>
+          <a class="sidebar-link is-active" href="/plans-wallet"><span class="sidebar-link-label"><span class="sidebar-link-title">Plans & Wallet</span><span class="sidebar-link-meta">credits and plans</span></span></a>
+          <a class="sidebar-link" href="/promotion-runs.html"><span class="sidebar-link-label"><span class="sidebar-link-title">Promotion Runs</span><span class="sidebar-link-meta">coverage and runs</span></span></a>
+        </nav>
+      </aside>
+      <div class="workspace">
+        <header class="topbar">
+          <div class="topbar-copy">
+            <p class="topbar-kicker">Commercial Layer</p>
+            <h2 class="topbar-title">计划档位与 credits 钱包</h2>
+            <p class="topbar-subtitle">给新用户送 credits，之后按订阅和充值管理推广力度。</p>
+          </div>
+        </header>
+        <main class="workspace-main">
+          <section class="panel panel-span-6">
+            <div class="panel-header"><div class="panel-header-copy"><p class="panel-kicker">Wallet</p><h3 class="panel-title">Workspace Wallet</h3></div></div>
+            <div id="walletSummary" class="stats-grid"></div>
+            <form id="topUpForm" class="form-grid">
+              <label><span>Top-Up Credits</span><input name="credits" type="number" min="1" value="100" required /></label>
+              <div class="form-actions"><button class="button button-primary" type="submit">Top-Up Checkout</button><span id="walletFeedback" class="inline-feedback"></span></div>
+            </form>
+          </section>
+          <section class="panel panel-span-6">
+            <div class="panel-header"><div class="panel-header-copy"><p class="panel-kicker">Plans</p><h3 class="panel-title">Promotion Plans</h3></div></div>
+            <div class="data-table-wrap">
+              <table class="data-table data-table--sticky-first">
+                <thead><tr><th>Plan</th><th>Coverage / Wave</th><th>Active Campaigns</th><th>Concurrent Runs</th><th>Included Credits</th></tr></thead>
+                <tbody id="planBody"></tbody>
+              </table>
+            </div>
+          </section>
+      <section class="panel panel-wide">
+        <div class="panel-header"><div class="panel-header-copy"><p class="panel-kicker">Ledger</p><h3 class="panel-title">Credit Ledger</h3></div></div>
+        <div id="ledgerBreakdown" class="stats-grid"></div>
+        <div class="overview-grid">
+          <section class="panel">
+            <div class="panel-header"><div class="panel-header-copy"><p class="panel-kicker">Trial</p><h3 class="panel-title">Promo Grants</h3></div></div>
+            <div class="data-table-wrap">
+              <table class="data-table data-table--sticky-first">
+                <thead><tr><th>Entry</th><th>Amount</th><th>Balance After</th><th>Occurred</th></tr></thead>
+                <tbody id="ledgerTrialBody"></tbody>
+              </table>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-header"><div class="panel-header-copy"><p class="panel-kicker">Top-Up</p><h3 class="panel-title">Purchased Credits</h3></div></div>
+            <div class="data-table-wrap">
+              <table class="data-table data-table--sticky-first">
+                <thead><tr><th>Entry</th><th>Amount</th><th>Source</th><th>Occurred</th></tr></thead>
+                <tbody id="ledgerTopUpBody"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><div class="panel-header-copy"><p class="panel-kicker">Usage</p><h3 class="panel-title">Consumption</h3></div></div>
+          <div class="data-table-wrap">
+            <table class="data-table data-table--sticky-first">
+              <thead><tr><th>Entry</th><th>Type</th><th>Amount</th><th>Source</th><th>Occurred</th></tr></thead>
+              <tbody id="ledgerUsageBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+        </main>
+      </div>
+    </div>
+    <script src="/app-config.js"></script>
+    <script type="module" src="/plans-wallet.js"></script>
+  </body>
+</html>

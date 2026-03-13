@@ -1,0 +1,12 @@
+[
+  {
+    "receiptId": "sandbox-receipt-001",
+    "intentId": "sandbox-intent-001",
+    "offerId": "replace-with-imported-offer-id",
+    "campaignId": "replace-with-imported-campaign-id",
+    "partnerId": "replace-with-real-partner-id",
+    "eventType": "shortlisted",
+    "occurredAt": "2026-03-12T10:00:00.000Z",
+    "signature": "sandbox-signature-001"
+  }
+]

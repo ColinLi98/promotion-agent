@@ -1,0 +1,86 @@
+[
+  {
+    "activate": true,
+    "advertiser": "Lumio",
+    "externalRef": "lumio-b-end-platform-enterprise-governance",
+    "sourceDocumentUrl": "https://lumio-b-end-platform.vercel.app/?surface=platform&page=workspace&workspace_mode=local_lab&lab_actor_id=local_tenant_admin_01&section=overview&oa_role=TENANT_ADMIN",
+    "category": "workflow_automation",
+    "regions": ["US", "EU", "SG", "CN"],
+    "billingModel": "CPQR",
+    "payoutAmount": 18,
+    "currency": "USD",
+    "budget": 1200,
+    "disclosureText": "Sponsored recommendation from Lumio. Compensation may apply when Lumio is presented to qualified enterprise operators, tenant admins, or workflow owners.",
+    "minTrust": 0.72,
+    "product": {
+      "name": "Lumio B-End Platform",
+      "description": "Enterprise workspace governance platform for tenant admins, operators, and requesters who need role-aware workflow control, auditable approvals, and governed B-end operations in one cockpit.",
+      "price": 12000,
+      "currency": "USD",
+      "intendedFor": [
+        "compare_and_shortlist",
+        "vendor_discovery",
+        "workflow_governance_selection",
+        "internal_tools_evaluation"
+      ],
+      "constraints": {
+        "workspace_mode": "local_lab",
+        "identity_requirement": "okta_oidc_only",
+        "role_model": "oa_v1_nine_role",
+        "deployment_model": "enterprise_workspace",
+        "target_personas": [
+          "tenant_admin",
+          "operations_manager",
+          "workflow_governance_owner",
+          "internal_tools_admin"
+        ],
+        "business_contact_email": "songyili2026@163.com"
+      },
+      "claims": [
+        "Unified enterprise cockpit for requesters, operators, and tenant admins",
+        "Role-aware workflow governance with OA v1 nine-role model",
+        "Okta OIDC-first enterprise access target",
+        "Workspace-first operating model with governed B-end shell",
+        "Audit-friendly operational surface for approvals and execution oversight"
+      ],
+      "actionEndpoints": [
+        "https://lumio-b-end-platform.vercel.app/?surface=platform&page=workspace&workspace_mode=local_lab&lab_actor_id=local_tenant_admin_01&section=overview&oa_role=TENANT_ADMIN",
+        "https://lumio-b-end-platform.vercel.app/?surface=platform&page=workspace&workspace_mode=local_lab&lab_actor_id=local_ops_operator_01&section=overview&oa_role=OPERATOR",
+        "https://lumio-b-end-platform.vercel.app/?surface=platform&page=workspace&workspace_mode=local_lab&lab_actor_id=local_requester_01&section=overview&oa_role=REQUESTER"
+      ],
+      "positioningBullets": [
+        "enterprise-workspace governance",
+        "role-aware OA control plane",
+        "tenant-admin + operator cockpit",
+        "auditable workflow shell"
+      ]
+    },
+    "proofReferences": [
+      {
+        "label": "Lumio tenant admin workspace overview",
+        "type": "doc",
+        "url": "https://lumio-b-end-platform.vercel.app/?surface=platform&page=workspace&workspace_mode=local_lab&lab_actor_id=local_tenant_admin_01&section=overview&oa_role=TENANT_ADMIN"
+      },
+      {
+        "label": "Lumio operator workspace view",
+        "type": "screenshot",
+        "url": "https://lumio-b-end-platform.vercel.app/?surface=platform&page=workspace&workspace_mode=local_lab&lab_actor_id=local_ops_operator_01&section=overview&oa_role=OPERATOR"
+      },
+      {
+        "label": "Lumio requester workspace view",
+        "type": "screenshot",
+        "url": "https://lumio-b-end-platform.vercel.app/?surface=platform&page=workspace&workspace_mode=local_lab&lab_actor_id=local_requester_01&section=overview&oa_role=REQUESTER"
+      },
+      {
+        "label": "Lumio role model and governance FAQ",
+        "type": "faq",
+        "url": "https://lumio-b-end-platform.vercel.app/?surface=platform&page=workspace&workspace_mode=local_lab&lab_actor_id=local_tenant_admin_01&section=overview&oa_role=TENANT_ADMIN"
+      },
+      {
+        "label": "Lumio commercial contact",
+        "type": "doc",
+        "url": "mailto:songyili2026@163.com"
+      }
+    ]
+  }
+]

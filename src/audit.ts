@@ -1,8 +1,16 @@
 import crypto from "node:crypto";
 
-import { AuditEventSchema, type AuditActorType, type AuditEntityType, type AuditEvent, type AuditStatus } from "./domain.js";
+import {
+  AuditEventSchema,
+  type AuditActorType,
+  type AuditEntityType,
+  type AuditEvent,
+  type AuditStatus,
+  type DataProvenance,
+} from "./domain.js";
 
 type AuditInput = {
+  dataProvenance?: DataProvenance;
   traceId: string;
   entityType: AuditEntityType;
   entityId: string;
@@ -14,6 +22,7 @@ type AuditInput = {
 };
 
 export const createAuditEvent = ({
+  dataProvenance = "ops_manual",
   traceId,
   entityType,
   entityId,
@@ -25,6 +34,7 @@ export const createAuditEvent = ({
 }: AuditInput): AuditEvent =>
   AuditEventSchema.parse({
     auditEventId: `audit_${crypto.randomUUID().slice(0, 12)}`,
+    dataProvenance,
     traceId,
     entityType,
     entityId,

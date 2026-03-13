@@ -9,6 +9,13 @@ import {
   type PartnerAgent,
   type SettlementReceipt,
 } from "./domain.js";
+import {
+  isConvertedEvent,
+  isInteractedEvent,
+  isPresentedEvent,
+  isShortlistedEvent,
+  isViewedEvent,
+} from "./event-contract.js";
 
 const inRange = (iso: string, from?: string, to?: string) => {
   const ts = new Date(iso).getTime();
@@ -40,17 +47,19 @@ export const buildMeasurementFunnel = (
   query: MeasurementFunnelQuery,
 ): MeasurementFunnel => {
   const filtered = receipts.filter((receipt) => matchesQuery(receipt, campaigns, partners, query));
+  const presentedCount = filtered.filter((item) => isPresentedEvent(item.eventType)).length;
   const counts = {
-    shortlisted: filtered.filter((item) => item.eventType === "shortlisted").length,
+    shortlisted: filtered.filter((item) => isShortlistedEvent(item.eventType)).length,
     shown: filtered.filter((item) => item.eventType === "shown").length,
-    detailView: filtered.filter((item) => item.eventType === "detail_view").length,
-    handoff: filtered.filter((item) => item.eventType === "handoff").length,
-    conversion: filtered.filter((item) => item.eventType === "conversion").length,
+    presented: presentedCount,
+    detailView: filtered.filter((item) => isViewedEvent(item.eventType)).length,
+    handoff: filtered.filter((item) => isInteractedEvent(item.eventType)).length,
+    conversion: filtered.filter((item) => isConvertedEvent(item.eventType)).length,
   };
 
   return MeasurementFunnelSchema.parse({
     ...counts,
-    detailViewRate: counts.shown > 0 ? counts.detailView / counts.shown : 0,
+    detailViewRate: counts.presented > 0 ? counts.detailView / counts.presented : 0,
     handoffRate: counts.detailView > 0 ? counts.handoff / counts.detailView : 0,
     actionConversionRate: counts.handoff > 0 ? counts.conversion / counts.handoff : 0,
   });
@@ -87,8 +96,9 @@ export const buildAttributionRows = (
       billedAmount: 0,
       currency: campaign.currency,
     };
-    if (receipt.eventType === "shortlisted") current.shortlisted += 1;
-    if (receipt.eventType === "conversion") current.conversions += 1;
+    if (isShortlistedEvent(receipt.eventType)) current.shortlisted += 1;
+    if (isPresentedEvent(receipt.eventType)) current.billableEvents += 0;
+    if (isConvertedEvent(receipt.eventType)) current.conversions += 1;
     grouped.set(key, current);
   }
 

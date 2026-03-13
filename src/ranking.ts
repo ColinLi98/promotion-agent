@@ -76,7 +76,8 @@ export const scoreCampaignForRequest = (
   const relevance = clamp(0.55 * categoryMatch + 0.2 * taskCoverage + 0.15 * regionCoverage + 0.1 * targetingCoverage);
   const expectedUtility = clamp(0.45 * relevance + 0.2 * regionCoverage + 0.2 * proofFreshness + 0.15 * taskCoverage);
   const affectiveFit = clamp(0.6 * narrativeCoverage(campaign) + 0.4 * taskCoverage);
-  const policyPass = campaign.status === "active" && campaign.policyPass && partner.status === "active";
+  const receiptReady = partner.supportsDeliveryReceipt && partner.supportsPresentationReceipt;
+  const policyPass = campaign.status === "active" && campaign.policyPass && partner.status === "active" && receiptReady;
   const disclosureReady = !request.disclosureRequired || Boolean(campaign.disclosureText && partner.supportsDisclosure);
   const eligible =
     policyPass &&
@@ -117,7 +118,14 @@ export const rankEligibleCampaigns = (
   campaigns: Campaign[],
   partners: PartnerAgent[],
 ): ScoredBid[] => {
-  const activePartners = partners.filter((partner) => partner.status === "active" && partner.acceptsSponsored);
+  const activePartners = partners.filter(
+    (partner) =>
+      partner.status === "active" &&
+      partner.acceptsSponsored &&
+      partner.supportsDisclosure &&
+      partner.supportsDeliveryReceipt &&
+      partner.supportsPresentationReceipt,
+  );
   const candidates = campaigns.flatMap((campaign) =>
     activePartners
       .filter((partner) => partner.supportedCategories.includes(request.category))

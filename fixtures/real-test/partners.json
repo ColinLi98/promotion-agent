@@ -1,0 +1,107 @@
+[
+  {
+    "leadId": "lead_enterprise_procurement_control_tower",
+    "partnerId": "partner_enterprise_procurement_control_tower",
+    "dataProvenance": "ops_manual",
+    "status": "active",
+    "supportedCategories": ["workflow_automation", "saas_procurement", "internal_tools"],
+    "slaTier": "enterprise_candidate",
+    "ownerId": "ops:real-test",
+    "acceptsSponsored": true,
+    "supportsDisclosure": true,
+    "authModes": ["oauth2", "api_key"],
+    "targetProfile": "Enterprise software procurement and shortlist orchestration agent",
+    "idealBuyerIntent": [
+      "compare_and_shortlist",
+      "vendor_discovery",
+      "internal_tools_evaluation"
+    ],
+    "fitReason": "Best fit for Lumio when the buyer agent is already comparing enterprise workflow or workspace-governance tools.",
+    "commercialContact": "songyili2026@163.com",
+    "importReady": true
+  },
+  {
+    "leadId": "lead_identity_workspace_governance_advisor",
+    "partnerId": "partner_identity_workspace_governance_advisor",
+    "dataProvenance": "ops_manual",
+    "status": "active",
+    "supportedCategories": ["workflow_automation", "identity_access", "enterprise_governance"],
+    "slaTier": "enterprise_candidate",
+    "ownerId": "ops:real-test",
+    "acceptsSponsored": true,
+    "supportsDisclosure": true,
+    "authModes": ["oauth2", "api_key"],
+    "targetProfile": "Identity, access, and workspace-governance recommendation agent",
+    "idealBuyerIntent": [
+      "workflow_governance_selection",
+      "vendor_discovery",
+      "security_review"
+    ],
+    "fitReason": "Lumio should appear here when a buyer is deciding on admin console, role model, and governance tooling.",
+    "commercialContact": "songyili2026@163.com",
+    "importReady": true
+  },
+  {
+    "leadId": "lead_revops_workflow_architect",
+    "partnerId": "partner_revops_workflow_architect",
+    "dataProvenance": "ops_manual",
+    "status": "active",
+    "supportedCategories": ["workflow_automation", "revops", "internal_tools"],
+    "slaTier": "enterprise_candidate",
+    "ownerId": "ops:real-test",
+    "acceptsSponsored": true,
+    "supportsDisclosure": true,
+    "authModes": ["oauth2", "api_key"],
+    "targetProfile": "RevOps and workflow redesign advisor for enterprise operations teams",
+    "idealBuyerIntent": [
+      "compare_and_shortlist",
+      "workflow_governance_selection",
+      "operations_system_refresh"
+    ],
+    "fitReason": "Useful for Lumio when teams are looking to replace fragmented approval, operator, and requester surfaces.",
+    "commercialContact": "songyili2026@163.com",
+    "importReady": true
+  },
+  {
+    "leadId": "lead_internal_tools_platform_selector",
+    "partnerId": "partner_internal_tools_platform_selector",
+    "dataProvenance": "ops_manual",
+    "status": "active",
+    "supportedCategories": ["workflow_automation", "developer_tools", "internal_tools"],
+    "slaTier": "enterprise_candidate",
+    "ownerId": "ops:real-test",
+    "acceptsSponsored": true,
+    "supportsDisclosure": true,
+    "authModes": ["oauth2", "api_key"],
+    "targetProfile": "Internal tools platform selection and adoption advisor",
+    "idealBuyerIntent": [
+      "internal_tools_evaluation",
+      "vendor_discovery",
+      "platform_standardization"
+    ],
+    "fitReason": "Good Lumio match when a buyer wants a governed enterprise shell instead of stitching together multiple back-office tools.",
+    "commercialContact": "songyili2026@163.com",
+    "importReady": true
+  },
+  {
+    "leadId": "lead_enterprise_ai_ops_copilot",
+    "partnerId": "partner_enterprise_ai_ops_copilot",
+    "dataProvenance": "ops_manual",
+    "status": "active",
+    "supportedCategories": ["workflow_automation", "agent_orchestration", "enterprise_governance"],
+    "slaTier": "enterprise_candidate",
+    "ownerId": "ops:real-test",
+    "acceptsSponsored": true,
+    "supportsDisclosure": true,
+    "authModes": ["oauth2", "api_key"],
+    "targetProfile": "Enterprise AI operations copilot for tenant admins and platform owners",
+    "idealBuyerIntent": [
+      "workflow_governance_selection",
+      "agent_orchestration_review",
+      "platform_ops_consolidation"
+    ],
+    "fitReason": "Relevant to Lumio when buyers are evaluating governed AI-assisted workspace operations across multiple personas.",
+    "commercialContact": "songyili2026@163.com",
+    "importReady": true
+  }
+]

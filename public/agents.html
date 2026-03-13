@@ -21,6 +21,7 @@
         <nav class="sidebar-nav">
           <a class="sidebar-link" href="/"><span class="sidebar-link-label"><span class="sidebar-link-title">Workbench</span><span class="sidebar-link-meta">overview</span></span></a>
           <a class="sidebar-link is-active" href="/agents"><span class="sidebar-link-label"><span class="sidebar-link-title">Agent CRM</span><span class="sidebar-link-meta">discovery and verification</span></span></a>
+          <a class="sidebar-link" href="/agents/pipeline"><span class="sidebar-link-label"><span class="sidebar-link-title">Recruitment Pipeline</span><span class="sidebar-link-meta">outreach and onboarding</span></span></a>
           <a class="sidebar-link" href="/measurement"><span class="sidebar-link-label"><span class="sidebar-link-title">Measurement</span><span class="sidebar-link-meta">funnel and attribution</span></span></a>
           <a class="sidebar-link" href="/risk"><span class="sidebar-link-label"><span class="sidebar-link-title">Risk Center</span><span class="sidebar-link-meta">cases and appeals</span></span></a>
           <a class="sidebar-link" href="/evidence"><span class="sidebar-link-label"><span class="sidebar-link-title">Evidence Center</span><span class="sidebar-link-meta">proof assets</span></span></a>
@@ -38,6 +39,7 @@
           </div>
           <div class="topbar-actions">
             <a class="button button-subtle" href="/">返回主控台</a>
+            <a class="button button-subtle" href="/agents/pipeline">打开招募流水线</a>
           </div>
         </header>
 
@@ -185,10 +187,52 @@
               <aside id="leadDetailPanel" class="detail-panel"></aside>
             </div>
           </section>
+
+          <section class="panel panel-wide">
+            <div class="panel-header">
+              <div class="panel-header-copy">
+                <p class="panel-kicker">Manual Completion Queue</p>
+                <h3 class="panel-title">缺失字段补全队列</h3>
+                <p class="panel-note">把发现到的关键信息缺失 lead 拉成单独队列，方便运营优先补齐 endpoint、contact、auth 与 disclosure 能力。</p>
+              </div>
+            </div>
+            <div class="overview-grid">
+              <div class="panel">
+                <div class="panel-header">
+                  <div class="panel-header-copy">
+                    <p class="panel-kicker">Queue Summary</p>
+                    <h3 class="panel-title">当前积压</h3>
+                  </div>
+                </div>
+                <div id="completionQueueSummary" class="detail-grid"></div>
+              </div>
+              <div class="panel">
+                <div class="panel-header">
+                  <div class="panel-header-copy">
+                    <p class="panel-kicker">Priority Leads</p>
+                    <h3 class="panel-title">待人工补全</h3>
+                  </div>
+                </div>
+                <div id="completionQueueList" class="stack"></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel panel-wide">
+            <div class="panel-header">
+              <div class="panel-header-copy">
+                <p class="panel-kicker">Observation List</p>
+                <h3 class="panel-title">观察名单</h3>
+                <p class="panel-note">不支持 delivery receipt 或 presentation receipt 的 lead 只能停留在观察名单，不进入自动推广名单。</p>
+              </div>
+            </div>
+            <div id="observationList" class="stack"></div>
+          </section>
         </main>
       </div>
     </div>
 
+    <script src="/app-config.js"></script>
     <script type="module" src="/agents.js"></script>
   </body>
 </html>

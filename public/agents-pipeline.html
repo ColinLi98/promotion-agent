@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Promotion Agent - Recruitment Pipeline</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="console-shell">
+      <aside class="sidebar">
+        <div class="sidebar-brand">
+          <div class="brand-mark">PA</div>
+          <div class="brand-copy">
+            <p class="brand-kicker">Promotion Agent</p>
+            <h1 class="brand-title">Recruitment Pipeline</h1>
+            <p class="brand-subtitle">Bring real buyer agents from sourcing to onboarding and promotion-readiness.</p>
+          </div>
+        </div>
+        <nav class="sidebar-nav">
+          <a class="sidebar-link" href="/"><span class="sidebar-link-label"><span class="sidebar-link-title">Workbench</span><span class="sidebar-link-meta">overview</span></span></a>
+          <a class="sidebar-link" href="/agents"><span class="sidebar-link-label"><span class="sidebar-link-title">Agent CRM</span><span class="sidebar-link-meta">lead inventory</span></span></a>
+          <a class="sidebar-link is-active" href="/agents/pipeline"><span class="sidebar-link-label"><span class="sidebar-link-title">Recruitment Pipeline</span><span class="sidebar-link-meta">outreach and onboarding</span></span></a>
+          <a class="sidebar-link" href="/measurement"><span class="sidebar-link-label"><span class="sidebar-link-title">Measurement</span><span class="sidebar-link-meta">funnel and attribution</span></span></a>
+          <a class="sidebar-link" href="/risk"><span class="sidebar-link-label"><span class="sidebar-link-title">Risk Center</span><span class="sidebar-link-meta">cases and appeals</span></span></a>
+          <a class="sidebar-link" href="/evidence"><span class="sidebar-link-label"><span class="sidebar-link-title">Evidence Center</span><span class="sidebar-link-meta">proof assets</span></span></a>
+        </nav>
+      </aside>
+
+      <div class="workspace">
+        <header class="topbar">
+          <div class="topbar-copy">
+            <p class="topbar-kicker">Recruitment Pipeline</p>
+            <h2 class="topbar-title">真实 buyer agent 招募与接入流水线</h2>
+            <p class="topbar-subtitle">把线索从 sourced 推进到 outreach、onboarding、ready 和 promoted，不再只是静态 lead 列表。</p>
+          </div>
+          <div class="topbar-actions">
+            <a class="button button-subtle" href="/agents">返回 Agent CRM</a>
+          </div>
+        </header>
+
+        <main class="workspace-main">
+          <section class="panel panel-wide">
+            <div class="panel-header">
+              <div class="panel-header-copy">
+                <p class="panel-kicker">Pipeline Filters</p>
+                <h3 class="panel-title">筛选与阶段概览</h3>
+              </div>
+              <div class="panel-actions">
+                <button id="processDueTasks" class="button button-subtle" type="button">Process Due Tasks</button>
+              </div>
+            </div>
+            <form id="pipelineFilters" class="form-grid">
+              <label><span>Stage</span><select name="stage"><option value="">All</option><option value="sourced">sourced</option><option value="qualified">qualified</option><option value="outreach">outreach</option><option value="replied">replied</option><option value="onboarding">onboarding</option><option value="verified">verified</option><option value="ready">ready</option><option value="promoted">promoted</option><option value="blocked">blocked</option></select></label>
+              <label><span>Owner</span><input name="ownerId" placeholder="ops:alice" /></label>
+              <label><span>Priority</span><select name="priority"><option value="">All</option><option value="high">high</option><option value="medium">medium</option><option value="low">low</option></select></label>
+              <div class="form-actions"><button class="button button-primary" type="submit">刷新</button></div>
+            </form>
+            <div id="pipelineSummary" class="detail-grid"></div>
+          </section>
+
+          <section class="panel panel-wide">
+            <div class="split-layout">
+              <div class="data-table-wrap">
+                <table class="data-table data-table--sticky-first">
+                  <thead><tr><th>Pipeline</th><th>Stage</th><th>Priority</th><th>Owner</th><th>Next Step</th></tr></thead>
+                  <tbody id="pipelineBody"></tbody>
+                </table>
+              </div>
+              <aside id="pipelineDetail" class="detail-panel"></aside>
+            </div>
+          </section>
+
+          <section class="panel panel-span-6">
+            <div class="panel-header">
+              <div class="panel-header-copy">
+                <p class="panel-kicker">Outreach</p>
+                <h3 class="panel-title">接触目标与回应</h3>
+              </div>
+            </div>
+            <form id="outreachForm" class="form-grid">
+              <label><span>Channel</span><select name="channel"><option value="email">email</option><option value="linkedin">linkedin</option><option value="partner_intro">partner_intro</option><option value="form">form</option><option value="direct_message">direct_message</option></select></label>
+              <label><span>Contact Point</span><input name="contactPoint" placeholder="partnerships@example.com" required /></label>
+              <label class="span-2"><span>Subject Line</span><input name="subjectLine" placeholder="Buyer-agent partnership subject" /></label>
+              <label class="span-2"><span>Message Template</span><textarea name="messageTemplate" rows="3" placeholder="Why this buyer agent is a fit for onboarding..." required></textarea></label>
+              <div class="form-actions span-2"><button class="button button-primary" type="submit">新增 Outreach Target</button><span id="outreachFeedback" class="inline-feedback"></span></div>
+            </form>
+            <div class="data-table-wrap">
+              <table class="data-table data-table--sticky-first">
+                <thead><tr><th>Channel</th><th>Status</th><th>Draft</th><th>Owner</th><th>Actions</th></tr></thead>
+                <tbody id="outreachBody"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="panel panel-span-6">
+            <div class="panel-header">
+              <div class="panel-header-copy">
+                <p class="panel-kicker">Tasks</p>
+                <h3 class="panel-title">接入与跟进任务</h3>
+              </div>
+            </div>
+            <form id="taskForm" class="form-grid">
+              <label><span>Task Type</span><select name="taskType"><option value="identity_verification">identity_verification</option><option value="auth_setup">auth_setup</option><option value="disclosure_review">disclosure_review</option><option value="delivery_receipt_test">delivery_receipt_test</option><option value="presentation_receipt_test">presentation_receipt_test</option><option value="sla_review">sla_review</option><option value="commercial_terms">commercial_terms</option></select></label>
+              <label><span>Due At</span><input name="dueAt" type="datetime-local" /></label>
+              <label class="span-2"><span>Notes</span><input name="notes" placeholder="What blocks this onboarding task?" /></label>
+              <div class="form-actions span-2"><button class="button button-primary" type="submit">新增 Onboarding Task</button><span id="taskFeedback" class="inline-feedback"></span></div>
+            </form>
+            <div id="readinessSummary" class="detail-grid"></div>
+            <div class="data-table-wrap">
+              <table class="data-table data-table--sticky-first">
+                <thead><tr><th>Task</th><th>Status</th><th>Owner</th><th>Evidence</th><th>Actions</th></tr></thead>
+                <tbody id="taskBody"></tbody>
+              </table>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <script src="/app-config.js"></script>
+    <script type="module" src="/agents-pipeline.js"></script>
+  </body>
+</html>

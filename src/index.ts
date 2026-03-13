@@ -5,10 +5,17 @@ const port = Number(process.env.PORT ?? 3000);
 const host = process.env.HOST ?? "0.0.0.0";
 
 const main = async () => {
-  const { store, persistence, hotStatePersistence, settlementGatewayMode } = await createConfiguredStore();
-  const app = buildServer(store);
+  const { store, persistence, hotStatePersistence, settlementGatewayMode, appMode, runtimeProfile } = await createConfiguredStore();
+  const app = buildServer(store, { appMode, runtimeProfile });
+  const recruitmentTaskIntervalMs = Number(process.env.RECRUITMENT_TASK_PROCESSOR_INTERVAL_MS ?? "60000");
+  const recruitmentTaskTimer = setInterval(() => {
+    void store.processDueRecruitmentTasks().catch((error) => {
+      console.error("Failed to process due recruitment tasks:", error);
+    });
+  }, recruitmentTaskIntervalMs);
 
   const shutdown = async () => {
+    clearInterval(recruitmentTaskTimer);
     await app.close();
     await store.close();
   };
@@ -26,7 +33,7 @@ const main = async () => {
     host,
   });
 
-  console.log(`promotion-agent listening on http://${host}:${port} using ${persistence} persistence, ${hotStatePersistence} hot-state, ${settlementGatewayMode} billing adapter`);
+  console.log(`promotion-agent listening on http://${host}:${port} using ${persistence} persistence, ${hotStatePersistence} hot-state, ${settlementGatewayMode} billing adapter, mode=${appMode}`);
 };
 
 main().catch((error) => {

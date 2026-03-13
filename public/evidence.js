@@ -1,7 +1,12 @@
+import { buildSourceBacklinkMarkup, getSourceContextFromLocation } from "./drilldown-links.js";
+
 const evidenceForm = document.querySelector("#evidenceForm");
 const evidenceBody = document.querySelector("#evidenceBody");
 const evidenceDetail = document.querySelector("#evidenceDetail");
 const evidenceFeedback = document.querySelector("#evidenceFeedback");
+const sourceBacklink = document.querySelector("#sourceBacklink");
+const appConfig = window.__PROMOTION_AGENT_CONFIG__ ?? { mode: "default" };
+const pageParams = new URLSearchParams(window.location.search);
 
 const state = {
   selectedAssetId: null,
@@ -34,9 +39,34 @@ const detailSection = (title, value) => `
   </section>
 `;
 
+const decorateEnvironment = () => {
+  const subtitle = document.querySelector(".brand-subtitle");
+  if (subtitle && !subtitle.querySelector("[data-environment-badge]")) {
+    const label = appConfig.mode === "demo" ? "Demo Environment" : appConfig.mode === "real_test" ? "Real Test Environment" : "Default Environment";
+    const tone = appConfig.mode === "demo" ? "reviewing" : appConfig.mode === "real_test" ? "active" : "draft";
+    subtitle.insertAdjacentHTML("beforeend", ` <span data-environment-badge="true" class="badge ${tone}">${escapeHtml(label)}</span>`);
+  }
+};
+
 let assets = [];
 
+const syncSelectionFromQuery = () => {
+  const assetId = pageParams.get("assetId");
+  const evidenceRef = pageParams.get("evidenceRef");
+  if (assetId && assets.some((item) => item.assetId === assetId)) {
+    state.selectedAssetId = assetId;
+    return;
+  }
+  if (evidenceRef) {
+    const matched = assets.find((item) => item.assetId === evidenceRef || item.url === evidenceRef || item.label === evidenceRef);
+    if (matched) {
+      state.selectedAssetId = matched.assetId;
+    }
+  }
+};
+
 const renderEvidence = () => {
+  syncSelectionFromQuery();
   if (!state.selectedAssetId && assets.length) {
     state.selectedAssetId = assets[0].assetId;
   }
@@ -44,7 +74,7 @@ const renderEvidence = () => {
   evidenceBody.innerHTML = assets
     .map((item) => `
       <tr class="${item.assetId === state.selectedAssetId ? "is-selected" : ""}">
-        <td><button class="row-button" data-select-asset="${escapeHtml(item.assetId)}"><strong>${escapeHtml(item.assetId)}</strong><div class="meta-row">${escapeHtml(item.label)}</div></button></td>
+        <td><button class="row-button" data-select-asset="${escapeHtml(item.assetId)}"><strong>${escapeHtml(item.assetId)}</strong><div class="meta-row">${escapeHtml(item.label)} · ${escapeHtml(item.dataProvenance)}</div></button></td>
         <td>${escapeHtml(item.campaignId)}</td>
         <td>${badge(item.type)}</td>
         <td>${escapeHtml(item.verifiedBy ?? "-")}</td>
@@ -62,7 +92,7 @@ const renderEvidence = () => {
   evidenceDetail.innerHTML = `
     ${detailSection("Asset", `
       <h3 class="panel-title">${escapeHtml(selected.label)}</h3>
-      <p class="meta-row">${badge(selected.type)} ${escapeHtml(selected.assetId)}</p>
+      <p class="meta-row">${badge(selected.type)} ${badge(selected.dataProvenance)} ${escapeHtml(selected.assetId)}</p>
     `)}
     ${detailSection("Campaign", `<p class="meta-row">${escapeHtml(selected.campaignId)}</p>`)}
     ${detailSection("Verification", `
@@ -74,6 +104,8 @@ const renderEvidence = () => {
 };
 
 const load = async () => {
+  decorateEnvironment();
+  sourceBacklink.innerHTML = buildSourceBacklinkMarkup(getSourceContextFromLocation());
   assets = await api.get("/evidence/assets");
   renderEvidence();
 };

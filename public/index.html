@@ -20,6 +20,10 @@
         </div>
         <nav class="site-nav">
           <a class="button button-subtle" href="/agents">Agent CRM</a>
+          <a class="button button-subtle" href="/agents/pipeline">Recruitment Pipeline</a>
+          <a class="button button-subtle" href="/buyer-agents">Buyer Agents</a>
+          <a class="button button-subtle" href="/plans-wallet">Plans & Wallet</a>
+          <a class="button button-subtle" href="/promotion-runs.html">Promotion Runs</a>
           <a class="button button-subtle" href="/measurement">Measurement</a>
           <a class="button button-subtle" href="/risk">Risk Center</a>
           <a class="button button-subtle" href="/evidence">Evidence Center</a>
@@ -113,7 +117,8 @@
                     <th>Partner</th>
                     <th>Status</th>
                     <th>Trust</th>
-                    <th>Disclosure</th>
+                    <th>Signal</th>
+                    <th>Verified</th>
                     <th>Auth</th>
                   </tr>
                 </thead>
@@ -233,6 +238,7 @@
             <label>
               <span>Billing Model</span>
               <select name="billingModel">
+                <option value="">Select</option>
                 <option value="CPQR">CPQR</option>
                 <option value="CPA">CPA</option>
               </select>
@@ -322,6 +328,7 @@
       </main>
     </div>
 
+    <script src="/app-config.js"></script>
     <script type="module" src="/app.js"></script>
   </body>
 </html>

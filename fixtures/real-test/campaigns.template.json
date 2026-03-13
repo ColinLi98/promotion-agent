@@ -1,0 +1,36 @@
+[
+  {
+    "activate": true,
+    "advertiser": "Replace Me CRM",
+    "externalRef": "sandbox-campaign-001",
+    "sourceDocumentUrl": "https://sandbox.example.com/campaigns/001",
+    "category": "crm_software",
+    "regions": ["US", "EU"],
+    "billingModel": "CPQR",
+    "payoutAmount": 150,
+    "currency": "USD",
+    "budget": 25000,
+    "disclosureText": "Sponsored recommendation from Replace Me CRM. Compensation may apply if shortlisted.",
+    "minTrust": 0.65,
+    "product": {
+      "name": "Replace Me CRM",
+      "description": "Replace with the real sandbox product description.",
+      "price": 499,
+      "currency": "USD",
+      "intendedFor": ["compare_and_shortlist", "vendor_discovery"],
+      "constraints": {
+        "company_size": "50-500"
+      },
+      "claims": ["SOC 2 Type II"],
+      "actionEndpoints": ["https://sandbox.example.com/api/demo"],
+      "positioningBullets": ["replace", "with", "real", "copy"]
+    },
+    "proofReferences": [
+      {
+        "label": "Primary proof",
+        "type": "doc",
+        "url": "https://sandbox.example.com/proof/001"
+      }
+    ]
+  }
+]

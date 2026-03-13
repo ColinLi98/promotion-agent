@@ -152,6 +152,16 @@ const detectFlags = (text: string) => {
   return {
     acceptsSponsored: lower.includes("sponsored") || lower.includes("promotion"),
     supportsDisclosure: lower.includes("disclosure") || lower.includes("sponsored"),
+    supportsDeliveryReceipt:
+      lower.includes("delivery receipt") ||
+      lower.includes("delivery_receipt") ||
+      lower.includes("receipt webhook") ||
+      lower.includes("delivery callback"),
+    supportsPresentationReceipt:
+      lower.includes("presentation receipt") ||
+      lower.includes("presented receipt") ||
+      lower.includes("offer.presented") ||
+      lower.includes("presentation webhook"),
   };
 };
 
@@ -282,6 +292,8 @@ export const crawlDiscoverySource = async (
       if (!endpointUrl) missingFields.push("endpointUrl");
       if (authModes.length === 0) missingFields.push("authModes");
       if (!flags.supportsDisclosure) missingFields.push("supportsDisclosure");
+      if (!flags.supportsDeliveryReceipt) missingFields.push("supportsDeliveryReceipt");
+      if (!flags.supportsPresentationReceipt) missingFields.push("supportsPresentationReceipt");
 
       const scoreBreakdown = computeBreakdown(verticals, authModes, endpointUrl, geo);
       const reachProxy = scoreBreakdown.reachFit;
@@ -299,6 +311,7 @@ export const crawlDiscoverySource = async (
           AgentLeadSchema.parse({
             agentId: `lead_${crypto.randomUUID().slice(0, 10)}`,
             dataOrigin: "discovered",
+            dataProvenance: "real_discovery",
             source: source.name,
             sourceType: source.sourceType,
             sourceRef: source.sourceId,
@@ -310,6 +323,8 @@ export const crawlDiscoverySource = async (
             authModes,
             acceptsSponsored: flags.acceptsSponsored,
             supportsDisclosure: flags.supportsDisclosure,
+            supportsDeliveryReceipt: flags.supportsDeliveryReceipt,
+            supportsPresentationReceipt: flags.supportsPresentationReceipt,
             trustSeed: Math.min(1, 0.45 + authModes.length * 0.12 + Number(Boolean(endpointUrl)) * 0.2),
             leadScore,
             discoveredAt: new Date().toISOString(),
@@ -320,6 +335,9 @@ export const crawlDiscoverySource = async (
             reachProxy,
             monetizationReadiness,
             verificationStatus: "new",
+            lastVerifiedAt: null,
+            verificationOwner: null,
+            evidenceRef: current.url,
             assignedOwner: null,
             notes: "",
             dedupeKey: buildDedupeKey(providerOrg, endpointUrl, source.sourceType),

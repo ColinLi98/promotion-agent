@@ -1,3 +1,5 @@
+import { buildEvidenceDrilldownMarkup, createSourceContext } from "./drilldown-links.js";
+
 const elements = {
   refreshAll: document.querySelector("#refreshAll"),
   healthDot: document.querySelector("#healthDot"),
@@ -36,6 +38,12 @@ const elements = {
   processRetryQueue: document.querySelector("#processRetryQueue"),
   retryQueueResult: document.querySelector("#retryQueueResult"),
 };
+const appConfig = window.__PROMOTION_AGENT_CONFIG__ ?? {
+  mode: "default",
+  realDataOnly: false,
+  defaultLeadFilter: [],
+};
+const pageParams = new URLSearchParams(window.location.search);
 
 const currency = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -90,8 +98,8 @@ const api = {
 const campaignStatusOrder = ["reviewing", "draft", "active", "paused", "rejected"];
 const settlementStatusOrder = ["retry_scheduled", "pending", "processing", "failed", "disputed", "settled"];
 
-const stableReceiptIdFor = ({ intentId, offerId, partnerId, campaignId }) =>
-  `rcpt_${[intentId, offerId, partnerId, campaignId, "shortlisted"].join("_").replaceAll(/[^a-zA-Z0-9_]/g, "_")}`;
+const stableReceiptIdFor = ({ intentId, offerId, partnerId, campaignId, eventType = "offer.presented" }) =>
+  `rcpt_${[intentId, offerId, partnerId, campaignId, eventType].join("_").replaceAll(/[^a-zA-Z0-9_]/g, "_")}`;
 
 const escapeHtml = (value) =>
   String(value)
@@ -128,6 +136,37 @@ const emptyState = (title, copy) => `
     <div class="meta-row">${escapeHtml(copy)}</div>
   </div>
 `;
+
+const environmentLabel =
+  appConfig.mode === "demo"
+    ? "Demo Environment"
+    : appConfig.mode === "real_test"
+      ? "Real Test Environment"
+      : "Default Environment";
+
+const environmentBadgeTone = appConfig.mode === "demo" ? "reviewing" : appConfig.mode === "real_test" ? "active" : "draft";
+
+const withProvenance = (path, provenance) => {
+  if (!provenance) return path;
+  const url = new URL(path, window.location.origin);
+  url.searchParams.set("provenance", provenance);
+  return `${url.pathname}${url.search}`;
+};
+
+const decorateEnvironment = () => {
+  const brandMeta = document.querySelector(".site-brand-copy .meta-row");
+  if (brandMeta && !brandMeta.querySelector("[data-environment-badge]")) {
+    brandMeta.insertAdjacentHTML(
+      "beforeend",
+      ` <span data-environment-badge="true" class="badge ${environmentBadgeTone}">${escapeHtml(environmentLabel)}</span>`,
+    );
+  }
+
+  const runtimeTitle = document.querySelector(".hero-card .detail-section-title");
+  if (runtimeTitle) {
+    runtimeTitle.textContent = `${runtimeTitle.textContent} · ${environmentLabel}`;
+  }
+};
 
 const setFeedback = (element, message, tone = "info") => {
   element.textContent = message;
@@ -181,14 +220,17 @@ const sortAuditEvents = (events) => {
 
 const renderSummary = (dashboard) => {
   elements.summaryCards.innerHTML = [
+    metricCard("Plan", dashboard.currentPlanId, "当前 workspace 的推广强度档位"),
+    metricCard("Available Credits", dashboard.availableCredits, "当前可消耗的推广 credits"),
     metricCard("Active Partners", dashboard.activePartners, "当前可以承接 sponsored shortlist 的合作方"),
     metricCard("Active Campaigns", dashboard.activeCampaigns, "已通过 policy 并进入排序候选"),
     metricCard("Settlements", dashboard.settlementCount, "收到合格回执后写入的账单记录"),
-    metricCard("Qualified Recommendation Rate", pct.format(dashboard.qualifiedRecommendationRate), "当前按 intent 聚合的 shortlist 命中比率"),
-    metricCard("Detail View Rate", pct.format(dashboard.detailViewRate), "从 shown 到 detail_view 的展开率"),
-    metricCard("Disclosure Shown Rate", pct.format(dashboard.disclosureShownRate), "赞助结果被正确披露展示的比例"),
-    metricCard("Action Conversion Rate", pct.format(dashboard.actionConversionRate), "handoff 后进入 conversion 的比例"),
+    metricCard("Qualified Recommendation Rate", pct.format(dashboard.qualifiedRecommendationRate), "当前按 intent 聚合的 presented 命中比率"),
+    metricCard("Viewed Rate", pct.format(dashboard.detailViewRate), "从 presented 到 viewed 的转化率"),
+    metricCard("Disclosure Shown Rate", pct.format(dashboard.disclosureShownRate), "赞助结果在 presented 时被正确披露的比例"),
+    metricCard("Action Conversion Rate", pct.format(dashboard.actionConversionRate), "interacted 后进入 converted 的比例"),
     metricCard("Qualified Agent Coverage", dashboard.qualifiedAgentCoverage, "已验证且可上线的目标 agent 数量"),
+    metricCard("Touched Buyer Agents", dashboard.touchedBuyerAgents, "当前进入可商业覆盖池的 buyer agent 数"),
   ].join("");
 };
 
@@ -270,7 +312,7 @@ const renderCampaignTable = () => {
   elements.campaignDetail.innerHTML = `
     ${detailSection("Summary", `
       <h3 class="panel-title">${escapeHtml(selected.advertiser)} · ${escapeHtml(selected.offer.title)}</h3>
-      <p class="meta-row">${badge(selected.status)} ${selectedPolicy ? badge(selectedPolicy.decision) : badge("draft", "unchecked")}</p>
+      <p class="meta-row">${badge(selected.status)} ${selectedPolicy ? badge(selectedPolicy.decision) : badge("draft", "unchecked")} ${badge(selected.dataProvenance)}</p>
     `)}
     ${detailSection("Commercial", `
       <p class="meta-row">Billing ${escapeHtml(selected.billingModel)} · Payout ${currency.format(selected.payoutAmount)} · Budget ${currency.format(selected.budget)}</p>
@@ -294,6 +336,10 @@ const renderCampaignTable = () => {
 
 const renderPartnerTable = () => {
   const partners = runtimeData.partners.slice().sort((left, right) => right.trustScore - left.trustScore);
+  const requestedPartnerId = pageParams.get("partnerId");
+  if (requestedPartnerId && partners.some((partner) => partner.partnerId === requestedPartnerId)) {
+    state.selectedPartnerId = requestedPartnerId;
+  }
   if (!state.selectedPartnerId && partners.length) {
     state.selectedPartnerId = partners[0].partnerId;
   }
@@ -304,12 +350,13 @@ const renderPartnerTable = () => {
         <td>
           <button class="row-button" data-select-partner="${escapeHtml(partner.partnerId)}">
             <strong>${escapeHtml(partner.providerOrg)}</strong>
-            <div class="meta-row">${escapeHtml(partner.supportedCategories.join(", "))}</div>
+            <div class="meta-row">${escapeHtml(partner.supportedCategories.join(", "))} · ${escapeHtml(partner.dataProvenance)}</div>
           </button>
         </td>
         <td>${badge(partner.status)}</td>
         <td>${partner.trustScore.toFixed(2)}</td>
-        <td>${partner.supportsDisclosure ? iconChip("ready", "D") : iconChip("missing", "!")}</td>
+        <td>${partner.supportsDisclosure ? iconChip("disclosure", "D") : iconChip("missing", "!")} ${partner.supportsDeliveryReceipt ? iconChip("delivery", "R") : ""} ${partner.supportsPresentationReceipt ? iconChip("presented", "P") : ""}</td>
+        <td>${escapeHtml(partner.verificationOwner ?? "-")}<div class="meta-row">${escapeHtml(partner.lastVerifiedAt ? new Date(partner.lastVerifiedAt).toLocaleDateString() : "never")}</div></td>
         <td>${escapeHtml(partner.authModes.join(", "))}</td>
       </tr>
     `)
@@ -324,16 +371,29 @@ const renderPartnerTable = () => {
   elements.partnerDetail.innerHTML = `
     ${detailSection("Partner", `
       <h3 class="panel-title">${escapeHtml(selected.providerOrg)}</h3>
-      <p class="meta-row">${badge(selected.status)} ${iconChip(`trust ${selected.trustScore.toFixed(2)}`, "T")}</p>
+      <p class="meta-row">${badge(selected.status)} ${badge(selected.dataProvenance)} ${iconChip(`trust ${selected.trustScore.toFixed(2)}`, "T")}</p>
     `)}
     ${detailSection("Integration", `
       <p class="meta-row">${escapeHtml(selected.endpoint)}</p>
       <p class="meta-row">Auth: ${escapeHtml(selected.authModes.join(", "))}</p>
       <p class="meta-row">Disclosure: ${selected.supportsDisclosure ? "yes" : "no"}</p>
+      <p class="meta-row">Delivery Receipt: ${selected.supportsDeliveryReceipt ? "yes" : "no"}</p>
+      <p class="meta-row">Presentation Receipt: ${selected.supportsPresentationReceipt ? "yes" : "no"}</p>
     `)}
     ${detailSection("Capability", `
       <p class="meta-row">Categories: ${escapeHtml(selected.supportedCategories.join(", "))}</p>
       <p class="meta-row">SLA tier: ${escapeHtml(selected.slaTier)}</p>
+      <p class="meta-row">Last Verified: ${escapeHtml(selected.lastVerifiedAt ? new Date(selected.lastVerifiedAt).toLocaleString() : "never")}</p>
+      <p class="meta-row">Verification Owner: ${escapeHtml(selected.verificationOwner ?? "unassigned")}</p>
+      ${buildEvidenceDrilldownMarkup(
+        selected.evidenceRef,
+        createSourceContext({
+          href: `/?partnerId=${encodeURIComponent(selected.partnerId)}`,
+          label: `${selected.providerOrg} Partner`,
+          type: "partner",
+          id: selected.partnerId,
+        }),
+      )}
     `)}
   `;
 };
@@ -354,7 +414,7 @@ const renderQueueTable = () => {
           <td>
             <button class="row-button" data-select-settlement="${escapeHtml(settlement.settlementId)}">
               <strong>${escapeHtml(settlement.settlementId)}</strong>
-              <div class="meta-row">${escapeHtml(settlement.intentId)}</div>
+              <div class="meta-row">${escapeHtml(settlement.intentId)} · ${escapeHtml(settlement.dataProvenance)}</div>
             </button>
           </td>
           <td>${badge(settlement.status)}</td>
@@ -376,7 +436,7 @@ const renderQueueTable = () => {
   elements.queueDetail.innerHTML = `
     ${detailSection("Settlement", `
       <h3 class="panel-title">${escapeHtml(selected.settlementId)}</h3>
-      <p class="meta-row">${badge(selected.status)} ${badge(selected.eventType)}</p>
+      <p class="meta-row">${badge(selected.status)} ${badge(selected.eventType)} ${badge(selected.dataProvenance)}</p>
     `)}
     ${detailSection("Provider", `
       <p class="meta-row">State: ${escapeHtml(selected.providerState ?? "pending")}</p>
@@ -412,7 +472,7 @@ const renderAuditTable = () => {
         <td>
           <button class="row-button" data-select-audit="${escapeHtml(event.auditEventId)}">
             <strong>${escapeHtml(event.action)}</strong>
-            <div class="meta-row">${escapeHtml(event.entityType)}</div>
+            <div class="meta-row">${escapeHtml(event.entityType)} · ${escapeHtml(event.dataProvenance)}</div>
           </button>
         </td>
         <td class="mono">${escapeHtml(event.traceId)}</td>
@@ -432,7 +492,7 @@ const renderAuditTable = () => {
   elements.auditDetail.innerHTML = `
     ${detailSection("Event", `
       <h3 class="panel-title">${escapeHtml(selected.action)}</h3>
-      <p class="meta-row">${badge(selected.status)} ${iconChip(selected.actorType, selected.actorType === "system" ? "S" : "O")}</p>
+      <p class="meta-row">${badge(selected.status)} ${badge(selected.dataProvenance)} ${iconChip(selected.actorType, selected.actorType === "system" ? "S" : "O")}</p>
     `)}
     ${detailSection("Timeline", `
       <div class="timeline">
@@ -495,6 +555,7 @@ const renderShortlist = (result) => {
                   offerId: item.offerId,
                   partnerId: item.partnerId,
                   campaignId: item.campaignId,
+                  eventType: "offer.presented",
                 }),
               )}"
               data-intent-id="${escapeHtml(result.intentId)}"
@@ -502,7 +563,7 @@ const renderShortlist = (result) => {
               data-campaign-id="${escapeHtml(item.campaignId)}"
               data-partner-id="${escapeHtml(item.partnerId)}"
             >
-              发送 shortlisted 回执
+              发送 presented 回执
             </button>
           </div>
         </article>
@@ -522,15 +583,21 @@ const renderAll = () => {
 };
 
 const loadState = async () => {
+  const partnerPath = appConfig.realDataOnly ? withProvenance("/partners", "real_partner,ops_manual") : "/partners";
+  const campaignPath = appConfig.realDataOnly ? withProvenance("/campaigns", "real_campaign,ops_manual") : "/campaigns";
+  const settlementPath = appConfig.realDataOnly ? withProvenance("/settlements", "sandbox_settlement") : "/settlements";
+  const auditPath = appConfig.realDataOnly
+    ? withProvenance("/audit-trail?page=1&pageSize=20", "real_event,real_campaign,real_partner,real_discovery,sandbox_settlement,ops_manual")
+    : "/audit-trail?page=1&pageSize=20";
   const [health, dashboard, partners, campaigns, policyChecks, settlements, retryJobs, auditEvents] = await Promise.all([
     api.get("/health"),
     api.get("/dashboard"),
-    api.get("/partners"),
-    api.get("/campaigns"),
+    api.get(partnerPath),
+    api.get(campaignPath),
     api.get("/policy-checks"),
-    api.get("/settlements"),
+    api.get(settlementPath),
     api.get("/settlements/retry-jobs?limit=20"),
-    api.get("/audit-trail?page=1&pageSize=20"),
+    api.get(auditPath),
   ]);
 
   runtimeData.dashboard = dashboard;
@@ -547,6 +614,8 @@ const loadState = async () => {
 
   renderAll();
 };
+
+decorateEnvironment();
 
 elements.refreshAll.addEventListener("click", () => {
   loadState().catch((error) => {
@@ -658,6 +727,8 @@ elements.campaignForm.addEventListener("submit", async (event) => {
 
   const payload = {
     advertiser: formData.get("advertiser"),
+    externalRef: appConfig.mode === "real_test" ? String(formData.get("advertiser") ?? "").trim() || null : null,
+    sourceDocumentUrl: null,
     category: formData.get("category"),
     regions: [formData.get("region")],
     billingModel: formData.get("billingModel"),
@@ -790,13 +861,26 @@ document.addEventListener("click", async (event) => {
   if (actionButton.dataset.action === "receipt") {
     const response = await api.post("/events/receipts", {
       receiptId: actionButton.dataset.receiptId,
+      eventId: actionButton.dataset.receiptId,
+      specVersion: "1.0",
+      dataProvenance: appConfig.mode === "real_test" ? "real_event" : "demo_bootstrap",
+      traceId: actionButton.dataset.intentId,
+      opportunityId: actionButton.dataset.intentId,
       intentId: actionButton.dataset.intentId,
       offerId: actionButton.dataset.offerId,
       campaignId: actionButton.dataset.campaignId,
+      buyerAgentId: actionButton.dataset.partnerId,
       partnerId: actionButton.dataset.partnerId,
-      eventType: "shortlisted",
+      producerAgentId: actionButton.dataset.partnerId,
+      sellerAgentId: "promotion-agent",
+      environment: appConfig.mode === "demo" ? "staging" : "test",
+      eventType: "offer.presented",
       occurredAt: new Date().toISOString(),
       signature: "sig_ui_demo",
+      payload: {
+        placement: "shortlist",
+        disclosureShown: true,
+      },
     });
     const settlement = response.body.settlement;
     setFeedback(
@@ -805,7 +889,7 @@ document.addEventListener("click", async (event) => {
         ? "回执命中幂等键，未重复写入。"
         : settlement
           ? `已创建 settlement ${settlement.settlementId}，金额 ${currency.format(settlement.amount)}`
-          : "回执已记录，但当前计费模型不会在 shortlisted 事件结算。",
+          : "回执已记录，但当前计费模型不会在该事件结算。",
       response.body.deduplicated ? "info" : settlement ? "success" : "info",
     );
     await loadState();
@@ -834,6 +918,15 @@ document.addEventListener("click", async (event) => {
     await loadState();
   }
 });
+
+if (appConfig.mode === "real_test") {
+  for (const fieldName of ["advertiser", "productName", "category", "region", "description", "claim", "disclosureText", "actionEndpoint", "proofUrl", "payoutAmount", "budget", "price"]) {
+    const input = elements.campaignForm?.querySelector(`[name="${fieldName}"]`);
+    if (input) input.value = "";
+  }
+  const billingModel = elements.campaignForm?.querySelector('[name="billingModel"]');
+  if (billingModel) billingModel.value = "";
+}
 
 loadState().catch((error) => {
   console.error(error);

@@ -16,6 +16,7 @@ const requestedPageSize = params.get("pageSize");
 const supportedPageSizes = new Set(["10", "20", "50"]);
 let currentPageData = null;
 let selectedAuditEventId = null;
+const appConfig = window.__PROMOTION_AGENT_CONFIG__ ?? { mode: "default", realDataOnly: false };
 
 const escapeHtml = (value) =>
   String(value)
@@ -34,6 +35,15 @@ const detailSection = (title, value) => `
     <div class="detail-section-value">${value}</div>
   </section>
 `;
+
+const decorateEnvironment = () => {
+  const subtitle = document.querySelector(".brand-subtitle");
+  if (subtitle && !subtitle.querySelector("[data-environment-badge]")) {
+    const label = appConfig.mode === "demo" ? "Demo Environment" : appConfig.mode === "real_test" ? "Real Test Environment" : "Default Environment";
+    const tone = appConfig.mode === "demo" ? "reviewing" : appConfig.mode === "real_test" ? "active" : "draft";
+    subtitle.insertAdjacentHTML("beforeend", ` <span data-environment-badge="true" class="badge ${tone}">${escapeHtml(label)}</span>`);
+  }
+};
 
 const syncQueryToUrl = () => {
   const next = new URLSearchParams();
@@ -64,7 +74,7 @@ const render = () => {
     .map(
       (event) => `
         <tr class="${event.auditEventId === selectedAuditEventId ? "is-selected" : ""}">
-          <td><button class="row-button" data-select-audit="${escapeHtml(event.auditEventId)}"><strong>${escapeHtml(event.action)}</strong><div class="meta-row">${escapeHtml(event.entityType)}</div></button></td>
+          <td><button class="row-button" data-select-audit="${escapeHtml(event.auditEventId)}"><strong>${escapeHtml(event.action)}</strong><div class="meta-row">${escapeHtml(event.entityType)} · ${escapeHtml(event.dataProvenance)}</div></button></td>
           <td class="mono">${escapeHtml(event.traceId)}</td>
           <td>${escapeHtml(event.entityId)}</td>
           <td>${badge(event.status)}</td>
@@ -78,7 +88,7 @@ const render = () => {
   elements.auditDetailPanel.innerHTML = `
     ${detailSection("Event", `
       <h3 class="panel-title">${escapeHtml(selected.action)}</h3>
-      <p class="meta-row">${badge(selected.status)} ${badge(selected.actorType)}</p>
+      <p class="meta-row">${badge(selected.status)} ${badge(selected.actorType)} ${badge(selected.dataProvenance)}</p>
     `)}
     ${detailSection("Trace", `
       <p class="mono">${escapeHtml(selected.traceId)}</p>
@@ -90,6 +100,7 @@ const render = () => {
 };
 
 const loadAuditTrail = async () => {
+  decorateEnvironment();
   syncQueryToUrl();
   const query = new URLSearchParams({
     page: String(currentPage),
@@ -97,6 +108,7 @@ const loadAuditTrail = async () => {
   });
   if (elements.traceIdInput.value.trim()) query.set("traceId", elements.traceIdInput.value.trim());
   if (elements.entityTypeSelect.value) query.set("entityType", elements.entityTypeSelect.value);
+  if (appConfig.realDataOnly) query.set("provenance", "real_event,real_campaign,real_partner,real_discovery,sandbox_settlement,ops_manual");
   currentPageData = await fetch(`/audit-trail?${query.toString()}`).then((response) => response.json());
   render();
 };

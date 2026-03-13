@@ -7,6 +7,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
+    "start:demo": "APP_MODE=demo PORT=3001 tsx src/index.ts",
+    "start:real-test": "APP_MODE=real_test PORT=3002 tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "db:init": "tsx scripts/db-init.ts",
     "db:embedded": "tsx scripts/start-embedded-postgres.ts",
@@ -14,6 +16,7 @@
     "billing:mock": "tsx scripts/start-billing-adapter-mock.ts",
     "alerts:mock": "tsx scripts/start-alert-mock.ts",
     "worker:settlement": "tsx scripts/start-settlement-worker.ts",
+    "worker:settlement:real-test": "APP_MODE=real_test SETTLEMENT_WORKER_METRICS_PORT=9465 tsx scripts/start-settlement-worker.ts",
     "test": "vitest run"
   },
   "engines": {
@@ -21,12 +24,15 @@
   },
   "dependencies": {
     "fastify": "^5.8.2",
+    "nodemailer": "^8.0.2",
     "pg": "^8.20.0",
     "redis": "^5.11.0",
+    "stripe": "^20.4.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^25.4.0",
+    "@types/nodemailer": "^7.0.11",
     "@types/pg": "^8.18.0",
     "embedded-postgres": "18.3.0-beta.16",
     "redis-memory-server": "^0.16.0",

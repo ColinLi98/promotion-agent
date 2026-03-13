@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Promotion Agent - Promotion Runs</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="console-shell">
+      <aside class="sidebar">
+        <div class="sidebar-brand">
+          <div class="brand-mark">PA</div>
+          <div class="brand-copy">
+            <p class="brand-kicker">Promotion Agent</p>
+            <h1 class="brand-title">Promotion Runs</h1>
+            <p class="brand-subtitle">Coverage waves, credits charged, and selected buyer agents.</p>
+          </div>
+        </div>
+        <nav class="sidebar-nav">
+          <a class="sidebar-link" href="/"><span class="sidebar-link-label"><span class="sidebar-link-title">Workbench</span><span class="sidebar-link-meta">overview</span></span></a>
+          <a class="sidebar-link" href="/buyer-agents"><span class="sidebar-link-label"><span class="sidebar-link-title">Buyer Agents</span><span class="sidebar-link-meta">scoring and tiers</span></span></a>
+          <a class="sidebar-link" href="/plans-wallet"><span class="sidebar-link-label"><span class="sidebar-link-title">Plans & Wallet</span><span class="sidebar-link-meta">credits and plans</span></span></a>
+          <a class="sidebar-link is-active" href="/promotion-runs.html"><span class="sidebar-link-label"><span class="sidebar-link-title">Promotion Runs</span><span class="sidebar-link-meta">coverage and runs</span></span></a>
+        </nav>
+      </aside>
+      <div class="workspace">
+        <header class="topbar">
+          <div class="topbar-copy">
+            <p class="topbar-kicker">Promotion Intensity</p>
+            <h2 class="topbar-title">推广波次与覆盖结果</h2>
+            <p class="topbar-subtitle">把推广波次拆成目标选择、dispatch、接收结果和后续转化，不再只看静态覆盖名单。</p>
+          </div>
+        </header>
+        <main class="workspace-main">
+          <section class="panel panel-wide">
+            <form id="promotionRunForm" class="form-grid">
+              <label><span>Campaign ID</span><input name="campaignId" placeholder="cmp_xxx" required /></label>
+              <label><span>Category</span><input name="category" placeholder="workflow_automation" required /></label>
+              <label><span>Task Type</span><input name="taskType" placeholder="vendor_discovery" required /></label>
+              <label><span>Geo</span><input name="geo" placeholder="US" /></label>
+              <div class="form-actions"><button class="button button-primary" type="submit">Create Promotion Run</button><span id="promotionRunFeedback" class="inline-feedback"></span></div>
+            </form>
+            <div class="table-control-bar">
+              <div class="table-control-group">
+                <button id="dispatchRun" class="button button-subtle" type="button">Dispatch Selected Run</button>
+                <button id="generateShortlist" class="button button-primary" type="button">Generate Shortlist</button>
+              </div>
+            </div>
+            <div id="promotionRunFunnel" class="status-strip"></div>
+            <div class="split-layout">
+              <div class="data-table-wrap">
+                <table class="data-table data-table--sticky-first">
+                  <thead><tr><th>Run</th><th>Status</th><th>Plan</th><th>Coverage</th><th>Credits</th></tr></thead>
+                  <tbody id="promotionRunBody"></tbody>
+                </table>
+              </div>
+              <aside id="promotionRunDetail" class="detail-panel"></aside>
+            </div>
+          </section>
+          <section class="panel panel-wide">
+            <div class="panel-header">
+              <div class="panel-header-copy">
+                <p class="panel-kicker">Delivery Ops</p>
+                <h3 class="panel-title">分发运营指标</h3>
+                <p class="panel-note">看 dispatch success、acceptance、失败原因和当前处于 cooldown / retry 的 buyer agents。</p>
+              </div>
+            </div>
+            <div id="deliveryMetricsGrid" class="detail-grid"></div>
+            <div class="overview-grid">
+              <div class="panel">
+                <div class="panel-header">
+                  <div class="panel-header-copy">
+                    <p class="panel-kicker">Failure Reasons</p>
+                    <h3 class="panel-title">失败原因拆解</h3>
+                  </div>
+                </div>
+                <div id="deliveryFailureBreakdown" class="stack"></div>
+              </div>
+              <div class="panel">
+                <div class="panel-header">
+                  <div class="panel-header-copy">
+                    <p class="panel-kicker">Cooldown & Retry</p>
+                    <h3 class="panel-title">当前冷却中的 Buyer Agents</h3>
+                  </div>
+                </div>
+                <div id="deliveryCooldownList" class="stack"></div>
+              </div>
+            </div>
+          </section>
+          <section class="panel panel-wide">
+            <div class="panel-header">
+              <div class="panel-header-copy">
+                <p class="panel-kicker">Shortlist</p>
+                <h3 class="panel-title">Promotion Run Shortlist & Receipt</h3>
+                <p class="panel-note">dispatch 通过后，再基于 accepted buyer agents 生成 shortlist，并继续回传 receipt。</p>
+              </div>
+            </div>
+            <div class="table-control-bar">
+              <div class="table-control-group">
+                <button id="simulateShortlistedAll" class="button button-subtle" type="button">Shortlisted All</button>
+                <button id="simulatePresentedAll" class="button button-subtle" type="button">Presented All</button>
+                <button id="simulateViewedAll" class="button button-subtle" type="button">Viewed All</button>
+                <button id="simulateInteractedAll" class="button button-subtle" type="button">Interacted All</button>
+                <button id="simulateConversionAll" class="button button-primary" type="button">Converted All</button>
+              </div>
+            </div>
+            <div id="promotionShortlistResult" class="stack"></div>
+          </section>
+        </main>
+      </div>
+    </div>
+    <script src="/app-config.js"></script>
+    <script type="module" src="/promotion-runs.js"></script>
+  </body>
+</html>

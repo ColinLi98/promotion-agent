@@ -1,0 +1,273 @@
+[
+  {
+    "activate": true,
+    "advertiser": "Lumio",
+    "externalRef": "lumio-tenant-admin-control-plane",
+    "sourceDocumentUrl": "https://lumio-b-end-platform.vercel.app/?surface=platform&page=workspace&workspace_mode=local_lab&lab_actor_id=local_tenant_admin_01&section=overview&oa_role=TENANT_ADMIN",
+    "category": "workflow_automation",
+    "regions": ["US", "EU", "SG"],
+    "billingModel": "CPQR",
+    "payoutAmount": 22,
+    "currency": "USD",
+    "budget": 800,
+    "disclosureText": "Sponsored recommendation from Lumio. Compensation may apply when Lumio is presented to qualified tenant admins evaluating workspace governance and role model controls.",
+    "minTrust": 0.74,
+    "product": {
+      "name": "Lumio Tenant Admin Control Plane",
+      "description": "Workspace governance cockpit for tenant admins who need centralized role policy, enterprise login control, and auditable operational oversight across requester and operator workflows.",
+      "price": 12000,
+      "currency": "USD",
+      "intendedFor": [
+        "compare_and_shortlist",
+        "workflow_governance_selection",
+        "internal_tools_evaluation"
+      ],
+      "constraints": {
+        "persona": "tenant_admin",
+        "identity_requirement": "okta_oidc_only",
+        "role_model": "oa_v1_nine_role",
+        "business_contact_email": "songyili2026@163.com"
+      },
+      "claims": [
+        "Tenant-admin-first control plane for enterprise workspace governance",
+        "Role-aware access and approval governance using OA v1 nine-role model",
+        "Okta OIDC-first identity target for enterprise rollout",
+        "Unified visibility across requester, operator, and admin surfaces"
+      ],
+      "actionEndpoints": [
+        "https://lumio-b-end-platform.vercel.app/?surface=platform&page=workspace&workspace_mode=local_lab&lab_actor_id=local_tenant_admin_01&section=overview&oa_role=TENANT_ADMIN"
+      ],
+      "positioningBullets": [
+        "tenant-admin governance cockpit",
+        "role policy control",
+        "enterprise workspace shell",
+        "auditable admin surface"
+      ]
+    },
+    "proofReferences": [
+      {
+        "label": "Lumio / Tenant Admin / Proof / Workspace Overview",
+        "type": "doc",
+        "url": "https://lumio-b-end-platform.vercel.app/?surface=platform&page=workspace&workspace_mode=local_lab&lab_actor_id=local_tenant_admin_01&section=overview&oa_role=TENANT_ADMIN"
+      },
+      {
+        "label": "Lumio / Tenant Admin / Proof / Governance Screen",
+        "type": "screenshot",
+        "url": "https://lumio-b-end-platform.vercel.app/?surface=platform&page=workspace&workspace_mode=local_lab&lab_actor_id=local_tenant_admin_01&section=overview&oa_role=TENANT_ADMIN"
+      },
+      {
+        "label": "Lumio / Tenant Admin / Contact / Commercial Inquiry",
+        "type": "doc",
+        "url": "mailto:songyili2026@163.com"
+      }
+    ],
+    "salesMaterial": {
+      "persona": "tenant_admin",
+      "targetAudience": "Tenant admins, platform owners, workspace governance leads",
+      "recommendedHook": "Give tenant admins one governed control plane instead of asking them to manage identity, role policy, and approvals across fragmented B-end tools.",
+      "headlineOptions": [
+        "A tenant-admin cockpit for governed enterprise workspace operations",
+        "Stop stitching admin policy, role control, and approvals across separate tools",
+        "Lumio gives tenant admins one role-aware operating surface"
+      ],
+      "outreachBullets": [
+        "Lead with role policy and governance first, not generic automation",
+        "Emphasize Okta OIDC-only fit for enterprise environments",
+        "Position Lumio as the shell where requester, operator, and admin responsibilities become auditable"
+      ],
+      "cta": "Book a tenant-admin walkthrough via songyili2026@163.com",
+      "recommendationReasonTemplate": "Recommend Lumio when the buyer is a tenant admin or platform owner who needs centralized role policy, enterprise identity alignment, and an auditable admin shell instead of scattered back-office tools."
+    },
+    "proofPack": {
+      "namingConvention": "Lumio / Tenant Admin / {Proof Type} / {Asset Name}",
+      "requiredAssets": [
+        "Workspace Overview",
+        "Role Policy Screen",
+        "Identity & SSO Notes",
+        "Admin Audit Flow",
+        "Commercial Inquiry Contact"
+      ],
+      "proofGoal": "Prove that Lumio is a governance-first admin cockpit, not a generic workflow app."
+    }
+  },
+  {
+    "activate": true,
+    "advertiser": "Lumio",
+    "externalRef": "lumio-operator-workbench",
+    "sourceDocumentUrl": "https://lumio-b-end-platform.vercel.app/?surface=platform&page=workspace&workspace_mode=local_lab&lab_actor_id=local_ops_operator_01&section=overview&oa_role=OPERATOR",
+    "category": "workflow_automation",
+    "regions": ["US", "EU", "SG"],
+    "billingModel": "CPQR",
+    "payoutAmount": 20,
+    "currency": "USD",
+    "budget": 700,
+    "disclosureText": "Sponsored recommendation from Lumio. Compensation may apply when Lumio is presented to qualified operators evaluating governed B-end workflow execution surfaces.",
+    "minTrust": 0.72,
+    "product": {
+      "name": "Lumio Operator Workbench",
+      "description": "Governed B-end operator cockpit for teams that need clean task execution, approval context, and cross-role visibility without sacrificing auditability.",
+      "price": 12000,
+      "currency": "USD",
+      "intendedFor": [
+        "compare_and_shortlist",
+        "operations_system_refresh",
+        "workflow_governance_selection"
+      ],
+      "constraints": {
+        "persona": "operator",
+        "workspace_mode": "local_lab",
+        "business_contact_email": "songyili2026@163.com"
+      },
+      "claims": [
+        "Operator-first execution cockpit with governed workflow context",
+        "Clear separation between requester, operator, and admin responsibilities",
+        "Audit-friendly B-end shell for enterprise operations",
+        "Designed for multi-role operational coordination"
+      ],
+      "actionEndpoints": [
+        "https://lumio-b-end-platform.vercel.app/?surface=platform&page=workspace&workspace_mode=local_lab&lab_actor_id=local_ops_operator_01&section=overview&oa_role=OPERATOR"
+      ],
+      "positioningBullets": [
+        "operator execution cockpit",
+        "governed B-end workflow surface",
+        "cross-role visibility",
+        "audit-friendly operations shell"
+      ]
+    },
+    "proofReferences": [
+      {
+        "label": "Lumio / Operator / Proof / Workbench Overview",
+        "type": "doc",
+        "url": "https://lumio-b-end-platform.vercel.app/?surface=platform&page=workspace&workspace_mode=local_lab&lab_actor_id=local_ops_operator_01&section=overview&oa_role=OPERATOR"
+      },
+      {
+        "label": "Lumio / Operator / Proof / Execution Flow Screenshot",
+        "type": "screenshot",
+        "url": "https://lumio-b-end-platform.vercel.app/?surface=platform&page=workspace&workspace_mode=local_lab&lab_actor_id=local_ops_operator_01&section=overview&oa_role=OPERATOR"
+      },
+      {
+        "label": "Lumio / Operator / Contact / Commercial Inquiry",
+        "type": "doc",
+        "url": "mailto:songyili2026@163.com"
+      }
+    ],
+    "salesMaterial": {
+      "persona": "operator",
+      "targetAudience": "Operations managers, workflow operators, execution owners",
+      "recommendedHook": "Give operators one clean execution cockpit with governance context, instead of bouncing between approval tools, admin consoles, and fragmented task surfaces.",
+      "headlineOptions": [
+        "An operator workbench built for governed execution",
+        "Lumio helps operators execute without losing approval or audit context",
+        "One B-end surface for operators who manage real workflow throughput"
+      ],
+      "outreachBullets": [
+        "Lead with execution clarity and fewer context switches",
+        "Show how requester, operator, and admin roles stay separated but visible",
+        "Position Lumio as an operator shell, not a generic ticketing layer"
+      ],
+      "cta": "Request an operator workbench walkthrough via songyili2026@163.com",
+      "recommendationReasonTemplate": "Recommend Lumio when the buyer is evaluating an execution surface for operators who need workflow context, role separation, and auditability in one governed B-end cockpit."
+    },
+    "proofPack": {
+      "namingConvention": "Lumio / Operator / {Proof Type} / {Asset Name}",
+      "requiredAssets": [
+        "Workbench Overview",
+        "Execution Flow Screen",
+        "Cross-Role Handoff Example",
+        "Audit Trail Example",
+        "Commercial Inquiry Contact"
+      ],
+      "proofGoal": "Prove that Lumio reduces operator friction while preserving governance and handoff clarity."
+    }
+  },
+  {
+    "activate": true,
+    "advertiser": "Lumio",
+    "externalRef": "lumio-procurement-governance",
+    "sourceDocumentUrl": "https://lumio-b-end-platform.vercel.app/?surface=platform&page=workspace&workspace_mode=local_lab&lab_actor_id=local_tenant_admin_01&section=overview&oa_role=TENANT_ADMIN",
+    "category": "saas_procurement",
+    "regions": ["US", "EU"],
+    "billingModel": "CPQR",
+    "payoutAmount": 25,
+    "currency": "USD",
+    "budget": 900,
+    "disclosureText": "Sponsored recommendation from Lumio. Compensation may apply when Lumio is presented to qualified procurement or vendor-selection agents evaluating enterprise workflow governance platforms.",
+    "minTrust": 0.75,
+    "product": {
+      "name": "Lumio Procurement Governance Workspace",
+      "description": "Enterprise procurement-facing workspace governance platform for teams comparing admin consoles, approval workflows, and governed internal operations tooling.",
+      "price": 12000,
+      "currency": "USD",
+      "intendedFor": [
+        "compare_and_shortlist",
+        "vendor_discovery",
+        "internal_tools_evaluation"
+      ],
+      "constraints": {
+        "persona": "procurement",
+        "evaluation_mode": "enterprise_vendor_selection",
+        "business_contact_email": "songyili2026@163.com"
+      },
+      "claims": [
+        "Single enterprise platform for requester, operator, and tenant-admin coordination",
+        "Procurement-friendly way to compare governance, role model, and auditability together",
+        "Reduces tool sprawl across admin, operator, and approval surfaces",
+        "Commercial contact available for enterprise evaluation"
+      ],
+      "actionEndpoints": [
+        "https://lumio-b-end-platform.vercel.app/?surface=platform&page=workspace&workspace_mode=local_lab&lab_actor_id=local_tenant_admin_01&section=overview&oa_role=TENANT_ADMIN"
+      ],
+      "positioningBullets": [
+        "enterprise governance evaluation",
+        "procurement-ready workspace platform",
+        "role model + auditability together",
+        "replace fragmented ops tooling"
+      ]
+    },
+    "proofReferences": [
+      {
+        "label": "Lumio / Procurement / Proof / Workspace Overview",
+        "type": "doc",
+        "url": "https://lumio-b-end-platform.vercel.app/?surface=platform&page=workspace&workspace_mode=local_lab&lab_actor_id=local_tenant_admin_01&section=overview&oa_role=TENANT_ADMIN"
+      },
+      {
+        "label": "Lumio / Procurement / Proof / Governance Comparison Screen",
+        "type": "screenshot",
+        "url": "https://lumio-b-end-platform.vercel.app/?surface=platform&page=workspace&workspace_mode=local_lab&lab_actor_id=local_tenant_admin_01&section=overview&oa_role=TENANT_ADMIN"
+      },
+      {
+        "label": "Lumio / Procurement / Contact / Commercial Inquiry",
+        "type": "doc",
+        "url": "mailto:songyili2026@163.com"
+      }
+    ],
+    "salesMaterial": {
+      "persona": "procurement",
+      "targetAudience": "Software procurement teams, vendor selection owners, internal tools evaluators",
+      "recommendedHook": "Make Lumio the platform that lets procurement compare governance, role model, auditability, and B-end usability in one decision, instead of evaluating each layer separately.",
+      "headlineOptions": [
+        "A procurement-ready enterprise governance workspace",
+        "Compare admin control, role model, and operational usability together",
+        "Lumio helps procurement replace fragmented ops tooling with one governed platform"
+      ],
+      "outreachBullets": [
+        "Lead with evaluation efficiency: fewer fragmented tools to compare",
+        "Translate role model and auditability into procurement language",
+        "Show that Lumio is easier to shortlist because it unifies admin, operator, and requester surfaces"
+      ],
+      "cta": "Start a procurement evaluation via songyili2026@163.com",
+      "recommendationReasonTemplate": "Recommend Lumio when the buyer is comparing enterprise tools and wants one governed workspace platform that combines admin control, role model clarity, and operational usability."
+    },
+    "proofPack": {
+      "namingConvention": "Lumio / Procurement / {Proof Type} / {Asset Name}",
+      "requiredAssets": [
+        "Workspace Overview",
+        "Governance Comparison Screen",
+        "Role Model Summary",
+        "Operational Scope Summary",
+        "Commercial Inquiry Contact"
+      ],
+      "proofGoal": "Prove that Lumio shortens enterprise evaluation by unifying governance, usability, and role model fit in one platform."
+    }
+  }
+]

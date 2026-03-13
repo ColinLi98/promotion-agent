@@ -50,6 +50,123 @@ pnpm start
 
 Server starts on `http://localhost:3000`.
 
+## Runtime Modes
+
+### Demo
+
+Stable stakeholder demo with synthetic data and automatic bootstrap activity:
+
+```bash
+pnpm start:demo
+```
+
+Demo runs on `http://localhost:3001` and:
+
+- uses in-memory persistence only
+- loads demo seed entities
+- bootstraps receipts, settlements, queue state, risk, and audit activity
+- exposes `GET /system/runtime-profile`
+
+### Real Test
+
+Full-real-data test lane with isolated state:
+
+```bash
+APP_MODE=real_test \
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54329/promotion_agent_real_test \
+REDIS_URL=redis://127.0.0.1:6380/1 \
+BILLING_ADAPTER_URL=http://127.0.0.1:8787/settlements \
+pnpm start:real-test
+```
+
+Real test runs on `http://localhost:3002` and:
+
+- refuses to start if `DATABASE_URL`, `REDIS_URL`, or `BILLING_ADAPTER_URL` is missing
+- seeds only approved `discovery_sources`
+- rejects startup if the database already contains `demo_*` provenance records
+- exposes `GET /system/runtime-profile`
+
+Initialize the real-test database with:
+
+```bash
+APP_MODE=real_test \
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54329/promotion_agent_real_test \
+pnpm db:init
+```
+
+Run the settlement worker for real test with:
+
+```bash
+APP_MODE=real_test \
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54329/promotion_agent_real_test \
+REDIS_URL=redis://127.0.0.1:6380/1 \
+BILLING_ADAPTER_URL=http://127.0.0.1:8787/settlements \
+pnpm worker:settlement:real-test
+```
+
+Import recorded sandbox receipts into real test with:
+
+```bash
+APP_MODE=real_test \
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54329/promotion_agent_real_test \
+REDIS_URL=redis://127.0.0.1:6380/1 \
+BILLING_ADAPTER_URL=http://127.0.0.1:8787/settlements \
+pnpm exec tsx scripts/import-real-test-receipts.ts ./receipts.json
+```
+
+## Stripe Top-Up Checkout
+
+To enable real checkout for wallet top-ups, set:
+
+```bash
+STRIPE_SECRET_KEY=sk_live_or_test
+STRIPE_PRICE_PER_CREDIT_CENTS=100
+STRIPE_CURRENCY=usd
+STRIPE_TOP_UP_PRODUCT_NAME="Promotion Agent Credits"
+```
+
+When Stripe is configured:
+
+- `POST /wallet/top-ups/checkout` creates a Stripe Checkout Session and returns `checkoutUrl`
+- `/plans-wallet` redirects the user to Stripe Checkout
+- after payment, Stripe redirects back to `/plans-wallet?checkout=success&session_id=...`
+- the page calls `GET /wallet/top-ups/confirm` to verify the session and credit the wallet exactly once
+
+Without Stripe configured:
+
+- `demo` continues to use direct sandbox top-ups
+- `real_test` returns an error for checkout creation
+
+Promote imported real discovery leads into real-test partners:
+
+```bash
+APP_MODE=real_test \
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54329/promotion_agent_real_test \
+REDIS_URL=redis://127.0.0.1:6380/1 \
+BILLING_ADAPTER_URL=http://127.0.0.1:8787/settlements \
+pnpm exec tsx scripts/import-real-test-partners.ts
+```
+
+Or provide an explicit partner import file:
+
+```bash
+APP_MODE=real_test \
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54329/promotion_agent_real_test \
+REDIS_URL=redis://127.0.0.1:6380/1 \
+BILLING_ADAPTER_URL=http://127.0.0.1:8787/settlements \
+pnpm exec tsx scripts/import-real-test-partners.ts ./partners.json
+```
+
+Import real sandbox campaigns from a controlled JSON file:
+
+```bash
+APP_MODE=real_test \
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54329/promotion_agent_real_test \
+REDIS_URL=redis://127.0.0.1:6380/1 \
+BILLING_ADAPTER_URL=http://127.0.0.1:8787/settlements \
+pnpm exec tsx scripts/import-real-test-campaigns.ts ./campaigns.json
+```
+
 By default the app uses in-memory persistence and in-memory hot state. If `DATABASE_URL` is set, startup switches to PostgreSQL automatically. If `REDIS_URL` is set, idempotency keys and opportunity cache switch to Redis.
 
 Hot-state keys are namespaced and versioned:
@@ -240,6 +357,31 @@ Leader election:
 - The worker uses a Redis lease on `leader:settlement-worker`
 - Only the elected leader processes retry jobs
 - Standby workers keep metrics and health endpoints but skip queue work
+
+## Outreach Sender
+
+Promotion outreach can now send directly over SMTP, including 163 Mail.
+
+For 163 Mail, configure:
+
+```bash
+export OUTREACH_SENDER_MODE=smtp
+export OUTREACH_SMTP_PROVIDER=163
+export OUTREACH_SMTP_HOST=smtp.163.com
+export OUTREACH_SMTP_PORT=465
+export OUTREACH_SMTP_SECURE=true
+export OUTREACH_SMTP_USER=songyili2026@163.com
+export OUTREACH_SMTP_PASS=<163_client_authorization_code>
+export OUTREACH_SMTP_FROM="Lumio Partnerships <songyili2026@163.com>"
+export OUTREACH_SMTP_REPLY_TO=songyili2026@163.com
+export OUTREACH_TRACKING_BASE_URL=https://your-public-promotion-agent-domain
+```
+
+Notes:
+
+- `OUTREACH_SMTP_PASS` is the 163 client authorization code, not the mailbox login password.
+- `OUTREACH_TRACKING_BASE_URL` is optional, but required if you want real email open tracking via `/outreach/open/:targetId/pixel.gif`.
+- SMTP mode currently sends real outreach for `email` and `partner_intro` channels.
 
 ## Billing Adapter
 

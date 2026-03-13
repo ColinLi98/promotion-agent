@@ -21,6 +21,7 @@
         <nav class="sidebar-nav">
           <a class="sidebar-link" href="/">Workbench</a>
           <a class="sidebar-link is-active" href="/agents">Agent CRM</a>
+          <a class="sidebar-link" href="/agents/pipeline">Recruitment Pipeline</a>
           <a class="sidebar-link" href="/measurement">Measurement</a>
           <a class="sidebar-link" href="/risk">Risk Center</a>
           <a class="sidebar-link" href="/evidence">Evidence Center</a>
@@ -38,6 +39,7 @@
           </div>
           <div class="topbar-actions">
             <a class="button button-subtle" href="/agents">返回 Agent CRM</a>
+            <a class="button button-subtle" href="/agents/pipeline">招募流水线</a>
           </div>
         </header>
 
@@ -60,6 +62,13 @@
               </div>
             </div>
             <form id="statusForm" class="form-grid">
+              <div class="span-2 checkbox-grid">
+                <label class="checkbox-field"><input type="checkbox" name="identity" checked />Identity</label>
+                <label class="checkbox-field"><input type="checkbox" name="auth" checked />Auth</label>
+                <label class="checkbox-field"><input type="checkbox" name="disclosure" checked />Disclosure</label>
+                <label class="checkbox-field"><input type="checkbox" name="sla" checked />SLA</label>
+                <label class="checkbox-field"><input type="checkbox" name="rateLimit" checked />Rate Limit</label>
+              </div>
               <label>
                 <span>Next Status</span>
                 <select name="nextStatus">
@@ -77,9 +86,44 @@
                 <span>Comment</span>
                 <input name="comment" value="Verified in CRM detail page." required />
               </label>
+              <label class="span-2">
+                <span>Evidence Ref</span>
+                <input name="evidenceRef" value="verification://crm-detail" />
+              </label>
               <div class="form-actions span-2">
                 <button type="submit" class="button button-primary">更新状态</button>
                 <span id="statusFeedback" class="inline-feedback"></span>
+              </div>
+            </form>
+          </section>
+
+          <section class="panel panel-span-6">
+            <div class="panel-header">
+              <div class="panel-header-copy">
+                <p class="panel-kicker">Partner Promotion</p>
+                <h3 class="panel-title">晋升为合作 Partner</h3>
+              </div>
+            </div>
+            <form id="promotionForm" class="form-grid">
+              <label class="span-2">
+                <span>Supported Categories</span>
+                <input name="supportedCategories" value="crm_software" />
+              </label>
+              <label>
+                <span>Partner Status</span>
+                <select name="status">
+                  <option value="verified">verified</option>
+                  <option value="active">active</option>
+                  <option value="suspended">suspended</option>
+                </select>
+              </label>
+              <label>
+                <span>SLA Tier</span>
+                <input name="slaTier" value="sandbox" />
+              </label>
+              <div class="form-actions span-2">
+                <button type="submit" class="button button-primary">Promote to Partner</button>
+                <span id="promotionFeedback" class="inline-feedback"></span>
               </div>
             </form>
           </section>
@@ -97,6 +141,7 @@
       </div>
     </div>
 
+    <script src="/app-config.js"></script>
     <script type="module" src="/agent-detail.js"></script>
   </body>
 </html>

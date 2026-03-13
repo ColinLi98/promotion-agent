@@ -1,0 +1,46 @@
+import type { SeedData } from "./seed.js";
+
+export const buildRealTestSeedData = (): SeedData => ({
+  discoverySources: [
+    {
+      sourceId: "src_public_registry",
+      sourceType: "public_registry",
+      name: "MCP.so Servers",
+      baseUrl: "https://mcp.so",
+      seedUrls: ["https://mcp.so/servers"],
+      active: true,
+      crawlPolicy: {
+        rateLimit: 1,
+        maxDepth: 1,
+      },
+      verticalHints: ["agent_orchestration", "developer_tools", "workflow_automation"],
+      geoHints: ["US", "EU", "Global"],
+      createdAt: "2026-03-01T08:00:00.000Z",
+      updatedAt: "2026-03-11T08:00:00.000Z",
+    },
+    {
+      sourceId: "src_partner_directory",
+      sourceType: "partner_directory",
+      name: "Glama MCP Servers",
+      baseUrl: "https://glama.ai",
+      seedUrls: ["https://glama.ai/mcp/servers"],
+      active: true,
+      crawlPolicy: {
+        rateLimit: 1,
+        maxDepth: 1,
+      },
+      verticalHints: ["agent_orchestration", "developer_tools", "workflow_automation"],
+      geoHints: ["US", "EU", "Global"],
+      createdAt: "2026-03-01T08:30:00.000Z",
+      updatedAt: "2026-03-11T08:30:00.000Z",
+    },
+  ],
+  leads: [],
+  partners: [],
+  campaigns: [],
+  verificationRecords: [],
+  evidenceAssets: [],
+  riskCases: [],
+  reputationRecords: [],
+  appeals: [],
+});
