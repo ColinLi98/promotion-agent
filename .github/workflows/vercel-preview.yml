@@ -41,6 +41,13 @@ jobs:
             exit 0
           fi
 
+          if ! npm_config_yes=true npx vercel@latest whoami --token="$VERCEL_TOKEN" >/tmp/vercel-auth.log 2>&1; then
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping preview deploy: VERCEL_TOKEN is present but invalid." >> "$GITHUB_STEP_SUMMARY"
+            tail -n 20 /tmp/vercel-auth.log >> "$GITHUB_STEP_SUMMARY" || true
+            exit 0
+          fi
+
           echo "deploy=true" >> "$GITHUB_OUTPUT"
 
       - name: Check out repository
