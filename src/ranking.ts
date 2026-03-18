@@ -84,7 +84,8 @@ export const scoreCampaignForRequest = (
     disclosureReady &&
     relevance >= request.relevanceFloor &&
     expectedUtility >= request.utilityFloor &&
-    trustScore >= campaign.minTrust;
+    trustScore >= campaign.minTrust &&
+    partner.trustScore >= campaign.minTrust;
 
   return {
     campaign,

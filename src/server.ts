@@ -156,8 +156,14 @@ export const buildServer = (
   app.get("/agents/leads", async () => store.listLeads());
   app.get("/discovery/sources", async () => store.listDiscoverySources());
   app.post("/discovery/sources", async (request, reply) => {
-    const result = await store.createDiscoverySource(request.body as never);
-    return reply.code(201).send(result);
+    try {
+      const result = await store.createDiscoverySource(request.body as never);
+      return reply.code(201).send(result);
+    } catch (error) {
+      return reply.code(400).send({
+        message: error instanceof Error ? error.message : "Discovery source could not be created.",
+      });
+    }
   });
   app.get("/discovery/runs", async () => store.listDiscoveryRuns());
   app.post("/discovery/runs", async (request, reply) => {
@@ -255,9 +261,15 @@ export const buildServer = (
   });
   app.post("/recruitment/pipelines/:pipelineId/outreach-targets", async (request, reply) => {
     const { pipelineId } = request.params as { pipelineId: string };
-    const target = await store.createOutreachTargetForPipeline(pipelineId, OutreachTargetInputSchema.parse(request.body));
-    if (!target) return reply.code(404).send({ message: "Recruitment pipeline not found." });
-    return reply.code(201).send(target);
+    try {
+      const target = await store.createOutreachTargetForPipeline(pipelineId, OutreachTargetInputSchema.parse(request.body));
+      if (!target) return reply.code(404).send({ message: "Recruitment pipeline not found." });
+      return reply.code(201).send(target);
+    } catch (error) {
+      return reply.code(400).send({
+        message: error instanceof Error ? error.message : "Outreach target could not be created.",
+      });
+    }
   });
   app.post("/outreach-targets/:targetId/status", async (request, reply) => {
     const { targetId } = request.params as { targetId: string };
@@ -336,6 +348,40 @@ export const buildServer = (
   app.get("/wallet/ledger", async (request) => {
     const query = request.query as { workspaceId?: string };
     return store.listCreditLedgerEntries(query.workspaceId);
+  });
+  app.get("/partner-reserves/:partnerId", async (request, reply) => {
+    const { partnerId } = request.params as { partnerId: string };
+    try {
+      return await store.getPartnerReserveAccount(partnerId);
+    } catch (error) {
+      return reply.code(404).send({
+        message: error instanceof Error ? error.message : "Partner reserve account not found.",
+      });
+    }
+  });
+  app.get("/partner-reserves/:partnerId/ledger", async (request) => {
+    const { partnerId } = request.params as { partnerId: string };
+    return store.listPartnerReserveLedgerEntries(partnerId);
+  });
+  app.post("/partner-reserves/:partnerId/deposit", async (request, reply) => {
+    const { partnerId } = request.params as { partnerId: string };
+    const body = (request.body as { amount?: number; sourceRef?: string; reasonType?: string } | undefined) ?? {};
+    if (!body.amount || body.amount <= 0) {
+      return reply.code(400).send({ message: "amount must be a positive number." });
+    }
+    try {
+      const account = await store.depositPartnerReserve(
+        partnerId,
+        body.amount,
+        body.sourceRef ?? "partner_reserve.manual_deposit",
+        body.reasonType ?? "manual_deposit",
+      );
+      return reply.code(201).send(account);
+    } catch (error) {
+      return reply.code(409).send({
+        message: error instanceof Error ? error.message : "Partner reserve deposit failed.",
+      });
+    }
   });
   app.post("/wallet/top-ups/checkout", async (request, reply) => {
     const body = (request.body as { workspaceId?: string; credits?: number } | undefined) ?? {};
@@ -421,16 +467,21 @@ export const buildServer = (
     if (!body.campaignId || !body.category || !body.taskType) {
       return reply.code(400).send({ message: "campaignId, category, and taskType are required." });
     }
-    const result = await store.createPromotionRun({
-      workspaceId: body.workspaceId,
-      campaignId: body.campaignId,
-      category: body.category,
-      taskType: body.taskType,
-      geo: body.geo,
-      sponsoredSlots: body.sponsoredSlots,
-      disclosureRequired: body.disclosureRequired,
-    });
-    return reply.code(201).send(result);
+    try {
+      const result = await store.createPromotionRun({
+        workspaceId: body.workspaceId,
+        campaignId: body.campaignId,
+        category: body.category,
+        taskType: body.taskType,
+        geo: body.geo,
+        sponsoredSlots: body.sponsoredSlots,
+        disclosureRequired: body.disclosureRequired,
+      });
+      return reply.code(201).send(result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Promotion run could not be created.";
+      return reply.code(message.includes("not found") ? 404 : 409).send({ message });
+    }
   });
   app.post("/promotion-runs/:promotionRunId/dispatch", async (request, reply) => {
     const { promotionRunId } = request.params as { promotionRunId: string };
@@ -550,8 +601,135 @@ export const buildServer = (
     return store.listEvidenceAssets({ provenance: query.provenance });
   });
   app.post("/evidence/assets", async (request, reply) => {
-    const asset = await store.createEvidenceAsset(request.body as never);
-    return reply.code(201).send(asset);
+    try {
+      const asset = await store.createEvidenceAsset(request.body as never);
+      return reply.code(201).send(asset);
+    } catch (error) {
+      return reply.code(400).send({
+        message: error instanceof Error ? error.message : "Evidence asset could not be created.",
+      });
+    }
+  });
+  app.get("/opc/profiles", async (request) => {
+    const query = request.query as {
+      provenance?: string;
+      entityVerificationStatus?: string;
+      primaryBusinessType?: string;
+    };
+    return store.listOpcProfiles(query);
+  });
+  app.post("/opc/profiles", async (request, reply) => {
+    try {
+      const profile = await store.createOpcProfile(request.body as never);
+      return reply.code(201).send(profile);
+    } catch (error) {
+      return reply.code(400).send({
+        message: error instanceof Error ? error.message : "OPC profile could not be created.",
+      });
+    }
+  });
+  app.get("/opc/evidence", async (request) => {
+    const query = request.query as { opcId?: string; provenance?: string };
+    return store.listRevenueEvidence(query);
+  });
+  app.post("/opc/evidence", async (request, reply) => {
+    try {
+      const evidence = await store.createRevenueEvidence(request.body as never);
+      return reply.code(201).send(evidence);
+    } catch (error) {
+      return reply.code(409).send({
+        message: error instanceof Error ? error.message : "Revenue evidence could not be created.",
+      });
+    }
+  });
+  app.get("/opc/reviews", async (request) => {
+    const query = request.query as { opcId?: string; decision?: string; provenance?: string };
+    return store.listVerificationReviews(query);
+  });
+  app.post("/opc/reviews", async (request, reply) => {
+    try {
+      const review = await store.createVerificationReview(request.body as never);
+      return reply.code(201).send(review);
+    } catch (error) {
+      return reply.code(409).send({
+        message: error instanceof Error ? error.message : "Verification review could not be created.",
+      });
+    }
+  });
+  app.get("/opc/health-snapshots", async (request) => {
+    const query = request.query as { opcId?: string; provenance?: string };
+    return store.listMonthlyHealthSnapshots(query);
+  });
+  app.post("/opc/health-snapshots", async (request, reply) => {
+    try {
+      const snapshot = await store.createMonthlyHealthSnapshot(request.body as never);
+      return reply.code(201).send(snapshot);
+    } catch (error) {
+      return reply.code(409).send({
+        message: error instanceof Error ? error.message : "Monthly health snapshot could not be created.",
+      });
+    }
+  });
+  app.get("/channel-profiles", async (request) => {
+    const query = request.query as { channelType?: string; channelStatus?: string; provenance?: string };
+    return store.listChannelProfiles(query);
+  });
+  app.post("/channel-profiles", async (request, reply) => {
+    try {
+      const profile = await store.createChannelProfile(request.body as never);
+      return reply.code(201).send(profile);
+    } catch (error) {
+      return reply.code(400).send({
+        message: error instanceof Error ? error.message : "Channel profile could not be created.",
+      });
+    }
+  });
+  app.get("/commercial-extensions", async (request) => {
+    const query = request.query as { partnerId?: string; provenance?: string };
+    return store.listCommercialExtensions(query);
+  });
+  app.post("/commercial-extensions", async (request, reply) => {
+    try {
+      const extension = await store.createCommercialExtension(request.body as never);
+      return reply.code(201).send(extension);
+    } catch (error) {
+      return reply.code(409).send({
+        message: error instanceof Error ? error.message : "Commercial extension could not be created.",
+      });
+    }
+  });
+  app.get("/partner-onboarding-cases", async (request) => {
+    const query = request.query as {
+      agentLeadId?: string;
+      channelId?: string;
+      currentStage?: string;
+      provenance?: string;
+    };
+    return store.listPartnerOnboardingCases(query);
+  });
+  app.post("/partner-onboarding-cases", async (request, reply) => {
+    try {
+      const onboardingCase = await store.createPartnerOnboardingCase(request.body as never);
+      return reply.code(201).send(onboardingCase);
+    } catch (error) {
+      return reply.code(409).send({
+        message: error instanceof Error ? error.message : "Partner onboarding case could not be created.",
+      });
+    }
+  });
+  app.get("/capability-verification-snapshots", async (request) => {
+    const query = request.query as { agentLeadId?: string; recommendedTier?: string; provenance?: string };
+    return store.listCapabilityVerificationSnapshots(query);
+  });
+  app.post("/capability-verification-snapshots", async (request, reply) => {
+    try {
+      const snapshot = await store.createCapabilityVerificationSnapshot(request.body as never);
+      return reply.code(201).send(snapshot);
+    } catch (error) {
+      return reply.code(409).send({
+        message: error instanceof Error ? error.message : "Capability verification snapshot could not be created.",
+      });
+    }
   });
   app.get("/risk/cases", async (request) => {
     const query = request.query as {
@@ -677,9 +855,15 @@ export const buildServer = (
   });
 
   app.post("/campaigns", async (request, reply) => {
-    const payload = CampaignDraftInputSchema.parse(request.body);
-    const result = await store.createCampaign(payload);
-    return reply.code(201).send(result);
+    try {
+      const payload = CampaignDraftInputSchema.parse(request.body);
+      const result = await store.createCampaign(payload);
+      return reply.code(201).send(result);
+    } catch (error) {
+      return reply.code(400).send({
+        message: error instanceof Error ? error.message : "Campaign could not be created.",
+      });
+    }
   });
 
   app.post("/campaigns/:campaignId/review", async (request, reply) => {

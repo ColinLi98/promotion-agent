@@ -262,6 +262,9 @@ CREATE TABLE IF NOT EXISTS campaigns (
   disclosure_text TEXT NOT NULL,
   policy_pass BOOLEAN NOT NULL,
   min_trust DOUBLE PRECISION NOT NULL,
+  opc_profile_id TEXT REFERENCES opc_profiles(opc_id),
+  opc_review_decision TEXT,
+  scale_eligibility TEXT NOT NULL DEFAULT 'full',
   link_bundle JSONB NOT NULL DEFAULT '{}'::jsonb,
   offer JSONB NOT NULL,
   proof_bundle JSONB NOT NULL,
@@ -274,6 +277,9 @@ ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS workspace_id TEXT NOT NULL DEFAUL
 ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS promotion_plan_id TEXT NOT NULL DEFAULT 'trial';
 ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS external_ref TEXT;
 ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS source_document_url TEXT;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS opc_profile_id TEXT REFERENCES opc_profiles(opc_id);
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS opc_review_decision TEXT;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS scale_eligibility TEXT NOT NULL DEFAULT 'full';
 ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS link_bundle JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 CREATE TABLE IF NOT EXISTS evidence_assets (
@@ -289,6 +295,149 @@ CREATE TABLE IF NOT EXISTS evidence_assets (
 );
 
 ALTER TABLE evidence_assets ADD COLUMN IF NOT EXISTS data_provenance TEXT NOT NULL DEFAULT 'ops_manual';
+
+CREATE TABLE IF NOT EXISTS opc_profiles (
+  opc_id TEXT PRIMARY KEY,
+  data_provenance TEXT NOT NULL DEFAULT 'ops_manual',
+  legal_entity_name TEXT NOT NULL,
+  registration_id TEXT NOT NULL,
+  operator_type TEXT NOT NULL,
+  primary_business_type TEXT NOT NULL,
+  business_model_primary TEXT NOT NULL,
+  website_url TEXT,
+  product_page_url TEXT,
+  course_page_url TEXT,
+  entity_verification_status TEXT NOT NULL,
+  onboarding_channel TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS revenue_evidence (
+  evidence_id TEXT PRIMARY KEY,
+  data_provenance TEXT NOT NULL DEFAULT 'ops_manual',
+  opc_id TEXT NOT NULL REFERENCES opc_profiles(opc_id),
+  period_start TEXT NOT NULL,
+  period_end TEXT NOT NULL,
+  payout_source TEXT NOT NULL,
+  settlement_amount DOUBLE PRECISION NOT NULL,
+  bank_inflow_amount DOUBLE PRECISION,
+  order_count INTEGER,
+  refund_amount DOUBLE PRECISION,
+  chargeback_amount DOUBLE PRECISION,
+  variable_cost_estimate DOUBLE PRECISION,
+  contribution_profit_estimate DOUBLE PRECISION,
+  reconciliation_status TEXT NOT NULL,
+  source_ref TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS verification_reviews (
+  review_id TEXT PRIMARY KEY,
+  data_provenance TEXT NOT NULL DEFAULT 'ops_manual',
+  opc_id TEXT NOT NULL REFERENCES opc_profiles(opc_id),
+  verification_score DOUBLE PRECISION NOT NULL,
+  guru_risk_score DOUBLE PRECISION NOT NULL,
+  external_customer_revenue_ratio DOUBLE PRECISION,
+  knowledge_revenue_ratio DOUBLE PRECISION,
+  proof_bundle_status TEXT NOT NULL,
+  customer_sample_status TEXT,
+  page_classification TEXT,
+  decision TEXT NOT NULL,
+  reviewer_owner TEXT,
+  valid_until TEXT,
+  decision_reason TEXT,
+  reviewed_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS monthly_health_snapshots (
+  snapshot_id TEXT PRIMARY KEY,
+  data_provenance TEXT NOT NULL DEFAULT 'ops_manual',
+  opc_id TEXT NOT NULL REFERENCES opc_profiles(opc_id),
+  month TEXT NOT NULL,
+  net_cash_in DOUBLE PRECISION,
+  contribution_profit_estimate DOUBLE PRECISION,
+  refund_rate DOUBLE PRECISION,
+  chargeback_rate DOUBLE PRECISION,
+  external_customer_revenue_ratio DOUBLE PRECISION,
+  knowledge_revenue_ratio DOUBLE PRECISION,
+  traffic_concentration DOUBLE PRECISION,
+  risk_delta DOUBLE PRECISION,
+  status_recommendation TEXT,
+  escalation_required BOOLEAN NOT NULL DEFAULT false,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS channel_profiles (
+  channel_id TEXT PRIMARY KEY,
+  data_provenance TEXT NOT NULL DEFAULT 'ops_manual',
+  channel_type TEXT NOT NULL,
+  operator_name TEXT,
+  discovery_method TEXT NOT NULL,
+  onboarding_mode TEXT NOT NULL,
+  expected_reach_proxy DOUBLE PRECISION,
+  supports_receipts JSONB NOT NULL DEFAULT '[]'::jsonb,
+  rate_limit_policy TEXT,
+  cost_model TEXT,
+  channel_status TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS commercial_extensions (
+  extension_id TEXT PRIMARY KEY,
+  data_provenance TEXT NOT NULL DEFAULT 'ops_manual',
+  partner_id TEXT NOT NULL REFERENCES partner_agents(partner_id),
+  extension_version TEXT NOT NULL,
+  accepts_commercial_opportunity BOOLEAN NOT NULL,
+  placement_types JSONB NOT NULL DEFAULT '[]'::jsonb,
+  disclosure_required BOOLEAN NOT NULL,
+  receipt_modes JSONB NOT NULL DEFAULT '[]'::jsonb,
+  billing_modes JSONB NOT NULL DEFAULT '[]'::jsonb,
+  supported_intent_domains JSONB NOT NULL DEFAULT '[]'::jsonb,
+  max_qps DOUBLE PRECISION,
+  policy_endpoint TEXT,
+  contract_required BOOLEAN NOT NULL DEFAULT false,
+  signature_scheme TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS partner_onboarding_cases (
+  case_id TEXT PRIMARY KEY,
+  data_provenance TEXT NOT NULL DEFAULT 'ops_manual',
+  agent_lead_id TEXT NOT NULL REFERENCES agent_leads(agent_id),
+  channel_id TEXT NOT NULL REFERENCES channel_profiles(channel_id),
+  current_stage TEXT NOT NULL,
+  contract_status TEXT,
+  sandbox_status TEXT,
+  pilot_budget_limit DOUBLE PRECISION,
+  technical_owner TEXT,
+  business_owner TEXT,
+  blocker_code TEXT,
+  next_review_at TEXT,
+  launched_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS capability_verification_snapshots (
+  snapshot_id TEXT PRIMARY KEY,
+  data_provenance TEXT NOT NULL DEFAULT 'ops_manual',
+  agent_lead_id TEXT NOT NULL REFERENCES agent_leads(agent_id),
+  public_card_valid BOOLEAN NOT NULL,
+  auth_test_passed BOOLEAN NOT NULL,
+  opportunity_test_passed BOOLEAN NOT NULL,
+  receipt_test_passed BOOLEAN NOT NULL,
+  presentation_receipt_supported BOOLEAN NOT NULL,
+  mean_latency_ms DOUBLE PRECISION,
+  success_rate_7d DOUBLE PRECISION,
+  risk_tier TEXT,
+  last_probe_at TEXT,
+  recommended_tier TEXT,
+  created_at TEXT NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS risk_cases (
   case_id TEXT PRIMARY KEY,
@@ -513,6 +662,29 @@ CREATE TABLE IF NOT EXISTS workspace_subscriptions (
   included_credits_per_cycle INTEGER NOT NULL,
   cycle_start_at TEXT NOT NULL,
   cycle_end_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS partner_reserve_accounts (
+  partner_id TEXT PRIMARY KEY REFERENCES partner_agents(partner_id),
+  currency TEXT NOT NULL,
+  available_amount DOUBLE PRECISION NOT NULL,
+  frozen_amount DOUBLE PRECISION NOT NULL,
+  slashed_amount DOUBLE PRECISION NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS partner_reserve_ledger_entries (
+  entry_id TEXT PRIMARY KEY,
+  partner_id TEXT NOT NULL REFERENCES partner_agents(partner_id),
+  entry_type TEXT NOT NULL,
+  amount DOUBLE PRECISION NOT NULL,
+  currency TEXT NOT NULL,
+  balance_available_after DOUBLE PRECISION NOT NULL,
+  balance_frozen_after DOUBLE PRECISION NOT NULL,
+  balance_slashed_after DOUBLE PRECISION NOT NULL,
+  source_ref TEXT NOT NULL,
+  reason_type TEXT NOT NULL,
+  occurred_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS promotion_runs (

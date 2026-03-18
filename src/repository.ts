@@ -4,8 +4,11 @@ import type {
   AuditEvent,
   AuditEventFilter,
   AuditEventPage,
+  CapabilityVerificationSnapshot,
   BuyerAgentScorecard,
   Campaign,
+  ChannelProfile,
+  CommercialExtension,
   CreditLedgerEntry,
   DiscoveryRun,
   DiscoverySource,
@@ -14,7 +17,12 @@ import type {
   EventReceipt,
   MeasurementFunnel,
   MeasurementFunnelQuery,
+  MonthlyHealthSnapshot,
+  OPCProfile,
   PartnerAgent,
+  PartnerReserveAccount,
+  PartnerReserveLedgerEntry,
+  PartnerOnboardingCase,
   PolicyCheckResult,
   PromotionRun,
   PromotionPlan,
@@ -24,6 +32,7 @@ import type {
   OnboardingTask,
   PartnerReadiness,
   ReputationRecord,
+  RevenueEvidence,
   RiskCase,
   SettlementReceipt,
   SettlementDeadLetterEntry,
@@ -33,6 +42,7 @@ import type {
   SettlementRetryJobFilter,
   VerificationChecklist,
   VerificationRecord,
+  VerificationReview,
   AttributionRow,
   BillingDraft,
   WorkspaceSubscription,
@@ -59,6 +69,28 @@ export interface PromotionAgentRepository {
   upsertCampaign(campaign: Campaign): Promise<void>;
   listEvidenceAssets(): Promise<EvidenceAsset[]>;
   insertEvidenceAsset(asset: EvidenceAsset): Promise<void>;
+  listOpcProfiles(): Promise<OPCProfile[]>;
+  getOpcProfile(opcId: string): Promise<OPCProfile | null>;
+  upsertOpcProfile(profile: OPCProfile): Promise<void>;
+  listRevenueEvidence(opcId?: string): Promise<RevenueEvidence[]>;
+  upsertRevenueEvidence(evidence: RevenueEvidence): Promise<void>;
+  listVerificationReviews(opcId?: string): Promise<VerificationReview[]>;
+  upsertVerificationReview(review: VerificationReview): Promise<void>;
+  listMonthlyHealthSnapshots(opcId?: string): Promise<MonthlyHealthSnapshot[]>;
+  upsertMonthlyHealthSnapshot(snapshot: MonthlyHealthSnapshot): Promise<void>;
+  listChannelProfiles(): Promise<ChannelProfile[]>;
+  getChannelProfile(channelId: string): Promise<ChannelProfile | null>;
+  upsertChannelProfile(profile: ChannelProfile): Promise<void>;
+  listCommercialExtensions(partnerId?: string): Promise<CommercialExtension[]>;
+  upsertCommercialExtension(extension: CommercialExtension): Promise<void>;
+  listPartnerOnboardingCases(agentLeadId?: string): Promise<PartnerOnboardingCase[]>;
+  upsertPartnerOnboardingCase(onboardingCase: PartnerOnboardingCase): Promise<void>;
+  listCapabilityVerificationSnapshots(agentLeadId?: string): Promise<CapabilityVerificationSnapshot[]>;
+  upsertCapabilityVerificationSnapshot(snapshot: CapabilityVerificationSnapshot): Promise<void>;
+  getPartnerReserveAccount(partnerId: string): Promise<PartnerReserveAccount | null>;
+  upsertPartnerReserveAccount(account: PartnerReserveAccount): Promise<void>;
+  listPartnerReserveLedgerEntries(partnerId?: string): Promise<PartnerReserveLedgerEntry[]>;
+  insertPartnerReserveLedgerEntry(entry: PartnerReserveLedgerEntry): Promise<void>;
   listRiskCases(filter?: Partial<{ status: string; severity: string; entityType: string; ownerId: string; dateFrom: string; dateTo: string; provenance: string; }>): Promise<RiskCase[]>;
   getRiskCase(caseId: string): Promise<RiskCase | null>;
   insertRiskCase(riskCase: RiskCase): Promise<void>;

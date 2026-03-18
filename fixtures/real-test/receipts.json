@@ -7,7 +7,7 @@
     "partnerId": "partner_brave_search_mcp_server_by_brave",
     "eventType": "conversion",
     "occurredAt": "2026-03-12T10:00:00.000Z",
-    "signature": "replace-with-real-sandbox-signature-1"
+    "signature": "sig_real_receipt_001"
   },
   {
     "receiptId": "lumio-receipt-002",
@@ -17,6 +17,6 @@
     "partnerId": "partner_302_browser_use_mcp_mcp_server",
     "eventType": "conversion",
     "occurredAt": "2026-03-12T10:05:00.000Z",
-    "signature": "replace-with-real-sandbox-signature-2"
+    "signature": "sig_real_receipt_002"
   }
 ]

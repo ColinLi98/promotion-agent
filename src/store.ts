@@ -12,8 +12,14 @@ import {
   AppealCaseSchema,
   AuditEventPageSchema,
   AuditEventSchema,
+  CapabilityVerificationSnapshotInputSchema,
+  CapabilityVerificationSnapshotSchema,
   CampaignDraftInputSchema,
   CampaignSchema,
+  ChannelProfileInputSchema,
+  ChannelProfileSchema,
+  CommercialExtensionInputSchema,
+  CommercialExtensionSchema,
   DeliveryMetricsSchema,
   DashboardSnapshotSchema,
   DiscoveryRunSchema,
@@ -23,11 +29,17 @@ import {
   EvidenceAssetSchema,
   EventReceiptSchema,
   MeasurementFunnelQuerySchema,
+  MonthlyHealthSnapshotInputSchema,
+  MonthlyHealthSnapshotSchema,
   OnboardingTaskInputSchema,
   OnboardingTaskSchema,
+  OPCProfileInputSchema,
+  OPCProfileSchema,
   OutreachTargetInputSchema,
   OutreachTargetSchema,
   PartnerAgentSchema,
+  PartnerOnboardingCaseInputSchema,
+  PartnerOnboardingCaseSchema,
   PartnerReadinessSchema,
   PolicyCheckResultSchema,
   PromotionRunSchema,
@@ -35,12 +47,16 @@ import {
   RecruitmentPipelineSchema,
   RecruitmentPipelineUpdateSchema,
   ReputationRecordSchema,
+  RevenueEvidenceInputSchema,
+  RevenueEvidenceSchema,
   RiskCaseInputSchema,
   RiskCaseSchema,
   SettlementDeadLetterEntrySchema,
   SettlementDeadLetterPageSchema,
   SettlementReceiptSchema,
   SettlementRetryJobSchema,
+  VerificationReviewSchema,
+  VerificationReviewInputSchema,
   type AgentLead,
   type AppMode,
   type AppealCase,
@@ -48,9 +64,15 @@ import {
   type AuditEvent,
   type AuditEventFilter,
   type AttributionRow,
+  type CapabilityVerificationSnapshotInput,
+  type CapabilityVerificationSnapshot,
   type BuyerAgentScorecard,
   type Campaign,
   type CampaignDraftInput,
+  type ChannelProfile,
+  type ChannelProfileInput,
+  type CommercialExtension,
+  type CommercialExtensionInput,
   type CreditLedgerEntry,
   type DataProvenance,
   type DeliveryMetrics,
@@ -64,12 +86,20 @@ import {
   type EventReceipt,
   type MeasurementFunnel,
   type MeasurementFunnelQuery,
+  type MonthlyHealthSnapshot,
+  type MonthlyHealthSnapshotInput,
   type OnboardingTask,
   type OnboardingTaskInput,
+  type OPCProfile,
+  type OPCProfileInput,
   type OpportunityRequest,
   type OutreachTarget,
   type OutreachTargetInput,
   type PartnerAgent,
+  type PartnerReserveAccount,
+  type PartnerReserveLedgerEntry,
+  type PartnerOnboardingCase,
+  type PartnerOnboardingCaseInput,
   type PartnerReadiness,
   type PolicyCheckResult,
   type PromotionPlan,
@@ -78,6 +108,8 @@ import {
   type RecruitmentPipeline,
   type RecruitmentPipelineUpdate,
   type ReputationRecord,
+  type RevenueEvidence,
+  type RevenueEvidenceInput,
   type RiskCase,
   type RiskCaseInput,
   type SettlementDeadLetterEntry,
@@ -88,8 +120,12 @@ import {
   type SettlementRetryJobFilter,
   type VerificationChecklist,
   type VerificationRecord,
+  type VerificationReview,
+  type VerificationReviewInput,
   type WorkspaceSubscription,
   type WorkspaceWallet,
+  PartnerReserveAccountSchema,
+  PartnerReserveLedgerEntrySchema,
   VerificationRecordSchema,
   WorkspaceWalletSchema,
 } from "./domain.js";
@@ -118,6 +154,11 @@ import {
   SimulatedOutreachSenderGateway,
 } from "./outreach-sender.js";
 import { runPolicyCheck } from "./policy.js";
+import {
+  assertNoPlaceholderEmail,
+  assertNoPlaceholderText,
+  assertNoPlaceholderUrl,
+} from "./real-data.js";
 import type { PromotionAgentRepository } from "./repository.js";
 import { rankEligibleCampaigns, shortlistCampaigns } from "./ranking.js";
 import { buildSeedData, type SeedData } from "./seed.js";
@@ -135,6 +176,10 @@ const buildPromotionRunTargetId = (promotionRunId: string, partnerId: string) =>
   `prt_${crypto.createHash("sha1").update(`${promotionRunId}:${partnerId}`).digest("hex").slice(0, 10)}`;
 const buildRecruitmentPipelineId = (leadId: string) => `pipe_${leadId}`;
 const buildPartnerReadinessId = (pipelineId: string) => `ready_${pipelineId}`;
+const buildChannelProfileId = (sourceType: AgentLead["sourceType"], source: string) =>
+  `chn_${crypto.createHash("sha1").update(`${sourceType}:${source}`).digest("hex").slice(0, 10)}`;
+const buildAutoPartnerOnboardingCaseId = (leadId: string) => `obc_auto_${leadId}`;
+const buildAutoCapabilitySnapshotId = (leadId: string) => `cvs_auto_${leadId}`;
 const buildOnboardingTaskId = (pipelineId: string, taskType: OnboardingTask["taskType"], relatedTargetId = "default") =>
   `task_${crypto.createHash("sha1").update(`${pipelineId}:${taskType}:${relatedTargetId}`).digest("hex").slice(0, 10)}`;
 const deliveryCooldownKey = (partnerId: string) => `delivery:cooldown:${partnerId}`;
@@ -148,6 +193,21 @@ const HOT_STATE_TTL = {
   retryLeaseMs: 10_000,
   deliveryCooldownSeconds: 30,
 } as const;
+
+const PROBATION_MAX_QUALIFIED_BUYER_AGENTS = 2;
+const TRUST_DELTA_WEIGHT = 0.02;
+const UNDER_REVIEW_DELTA_MULTIPLIER = 0.5;
+const DISPUTED_SETTLEMENT_TRUST_PENALTY = 0.05;
+const MIN_GOVERNED_TRUST_FOR_COMMERCIAL_ELIGIBILITY = 0.65;
+const MIN_GOVERNED_TRUST_FOR_DISPATCH = 0.55;
+const PARTNER_RESERVE_CURRENCY = "USD";
+const RISK_FREEZE_AMOUNT_BY_SEVERITY: Record<RiskCase["severity"], number> = {
+  low: 0,
+  medium: 25,
+  high: 75,
+  critical: 150,
+};
+const SETTLEMENT_DISPUTE_FREEZE_AMOUNT = 50;
 
 const RECEIPT_RESULT_POLL_ATTEMPTS = 10;
 const RECEIPT_RESULT_POLL_DELAY_MS = 120;
@@ -219,6 +279,13 @@ type RetryQueueProcessingSummary = {
   }>;
 };
 
+type CampaignOpcGate = {
+  reviewDecision: Campaign["opcReviewDecision"];
+  scaleEligibility: Campaign["scaleEligibility"];
+  activationAllowed: boolean;
+  reason: string | null;
+};
+
 const markDeduplicated = (result: ReceiptProcessingResult): ReceiptProcessingResult => ({
   ...result,
   deduplicated: true,
@@ -238,6 +305,16 @@ class InMemoryPromotionAgentRepository implements PromotionAgentRepository {
   private readonly campaigns: Campaign[];
   private readonly verificationRecords: VerificationRecord[];
   private readonly evidenceAssets: EvidenceAsset[];
+  private readonly opcProfiles: OPCProfile[];
+  private readonly revenueEvidence: RevenueEvidence[];
+  private readonly verificationReviews: VerificationReview[];
+  private readonly monthlyHealthSnapshots: MonthlyHealthSnapshot[];
+  private readonly channelProfiles: ChannelProfile[];
+  private readonly commercialExtensions: CommercialExtension[];
+  private readonly partnerOnboardingCases: PartnerOnboardingCase[];
+  private readonly capabilityVerificationSnapshots: CapabilityVerificationSnapshot[];
+  private readonly partnerReserveAccounts: PartnerReserveAccount[];
+  private readonly partnerReserveLedgerEntries: PartnerReserveLedgerEntry[];
   private readonly riskCases: RiskCase[];
   private readonly reputationRecords: ReputationRecord[];
   private readonly appeals: AppealCase[];
@@ -266,6 +343,16 @@ class InMemoryPromotionAgentRepository implements PromotionAgentRepository {
     this.campaigns = clone(seedData.campaigns);
     this.verificationRecords = clone(seedData.verificationRecords);
     this.evidenceAssets = clone(seedData.evidenceAssets);
+    this.opcProfiles = clone(seedData.opcProfiles);
+    this.revenueEvidence = clone(seedData.revenueEvidence);
+    this.verificationReviews = clone(seedData.verificationReviews);
+    this.monthlyHealthSnapshots = clone(seedData.monthlyHealthSnapshots);
+    this.channelProfiles = clone(seedData.channelProfiles);
+    this.commercialExtensions = clone(seedData.commercialExtensions);
+    this.partnerOnboardingCases = clone(seedData.partnerOnboardingCases);
+    this.capabilityVerificationSnapshots = clone(seedData.capabilityVerificationSnapshots);
+    this.partnerReserveAccounts = clone(seedData.partnerReserveAccounts);
+    this.partnerReserveLedgerEntries = clone(seedData.partnerReserveLedgerEntries);
     this.riskCases = clone(seedData.riskCases);
     this.reputationRecords = clone(seedData.reputationRecords);
     this.appeals = clone(seedData.appeals);
@@ -431,6 +518,161 @@ class InMemoryPromotionAgentRepository implements PromotionAgentRepository {
 
   async insertEvidenceAsset(asset: EvidenceAsset) {
     this.evidenceAssets.unshift(clone(EvidenceAssetSchema.parse(asset)));
+  }
+
+  async listOpcProfiles() {
+    return clone(this.opcProfiles);
+  }
+
+  async getOpcProfile(opcId: string) {
+    const profile = this.opcProfiles.find((item) => item.opcId === opcId);
+    return profile ? clone(profile) : null;
+  }
+
+  async upsertOpcProfile(profile: OPCProfile) {
+    const parsed = OPCProfileSchema.parse(profile);
+    const index = this.opcProfiles.findIndex((item) => item.opcId === parsed.opcId);
+    if (index < 0) {
+      this.opcProfiles.unshift(clone(parsed));
+      return;
+    }
+
+    this.opcProfiles[index] = clone(parsed);
+  }
+
+  async listRevenueEvidence(opcId?: string) {
+    return clone(this.revenueEvidence.filter((item) => !opcId || item.opcId === opcId));
+  }
+
+  async upsertRevenueEvidence(evidence: RevenueEvidence) {
+    const parsed = RevenueEvidenceSchema.parse(evidence);
+    const index = this.revenueEvidence.findIndex((item) => item.evidenceId === parsed.evidenceId);
+    if (index < 0) {
+      this.revenueEvidence.unshift(clone(parsed));
+      return;
+    }
+
+    this.revenueEvidence[index] = clone(parsed);
+  }
+
+  async listVerificationReviews(opcId?: string) {
+    return clone(this.verificationReviews.filter((item) => !opcId || item.opcId === opcId));
+  }
+
+  async upsertVerificationReview(review: VerificationReview) {
+    const parsed = VerificationReviewSchema.parse(review);
+    const index = this.verificationReviews.findIndex((item) => item.reviewId === parsed.reviewId);
+    if (index < 0) {
+      this.verificationReviews.unshift(clone(parsed));
+      return;
+    }
+
+    this.verificationReviews[index] = clone(parsed);
+  }
+
+  async listMonthlyHealthSnapshots(opcId?: string) {
+    return clone(this.monthlyHealthSnapshots.filter((item) => !opcId || item.opcId === opcId));
+  }
+
+  async upsertMonthlyHealthSnapshot(snapshot: MonthlyHealthSnapshot) {
+    const parsed = MonthlyHealthSnapshotSchema.parse(snapshot);
+    const index = this.monthlyHealthSnapshots.findIndex((item) => item.snapshotId === parsed.snapshotId);
+    if (index < 0) {
+      this.monthlyHealthSnapshots.unshift(clone(parsed));
+      return;
+    }
+
+    this.monthlyHealthSnapshots[index] = clone(parsed);
+  }
+
+  async listChannelProfiles() {
+    return clone(this.channelProfiles);
+  }
+
+  async getChannelProfile(channelId: string) {
+    const profile = this.channelProfiles.find((item) => item.channelId === channelId);
+    return profile ? clone(profile) : null;
+  }
+
+  async upsertChannelProfile(profile: ChannelProfile) {
+    const parsed = ChannelProfileSchema.parse(profile);
+    const index = this.channelProfiles.findIndex((item) => item.channelId === parsed.channelId);
+    if (index < 0) {
+      this.channelProfiles.unshift(clone(parsed));
+      return;
+    }
+
+    this.channelProfiles[index] = clone(parsed);
+  }
+
+  async listCommercialExtensions(partnerId?: string) {
+    return clone(this.commercialExtensions.filter((item) => !partnerId || item.partnerId === partnerId));
+  }
+
+  async upsertCommercialExtension(extension: CommercialExtension) {
+    const parsed = CommercialExtensionSchema.parse(extension);
+    const index = this.commercialExtensions.findIndex((item) => item.extensionId === parsed.extensionId);
+    if (index < 0) {
+      this.commercialExtensions.unshift(clone(parsed));
+      return;
+    }
+
+    this.commercialExtensions[index] = clone(parsed);
+  }
+
+  async listPartnerOnboardingCases(agentLeadId?: string) {
+    return clone(this.partnerOnboardingCases.filter((item) => !agentLeadId || item.agentLeadId === agentLeadId));
+  }
+
+  async upsertPartnerOnboardingCase(onboardingCase: PartnerOnboardingCase) {
+    const parsed = PartnerOnboardingCaseSchema.parse(onboardingCase);
+    const index = this.partnerOnboardingCases.findIndex((item) => item.caseId === parsed.caseId);
+    if (index < 0) {
+      this.partnerOnboardingCases.unshift(clone(parsed));
+      return;
+    }
+
+    this.partnerOnboardingCases[index] = clone(parsed);
+  }
+
+  async listCapabilityVerificationSnapshots(agentLeadId?: string) {
+    return clone(
+      this.capabilityVerificationSnapshots.filter((item) => !agentLeadId || item.agentLeadId === agentLeadId),
+    );
+  }
+
+  async upsertCapabilityVerificationSnapshot(snapshot: CapabilityVerificationSnapshot) {
+    const parsed = CapabilityVerificationSnapshotSchema.parse(snapshot);
+    const index = this.capabilityVerificationSnapshots.findIndex((item) => item.snapshotId === parsed.snapshotId);
+    if (index < 0) {
+      this.capabilityVerificationSnapshots.unshift(clone(parsed));
+      return;
+    }
+
+    this.capabilityVerificationSnapshots[index] = clone(parsed);
+  }
+
+  async getPartnerReserveAccount(partnerId: string) {
+    const account = this.partnerReserveAccounts.find((item) => item.partnerId === partnerId);
+    return account ? clone(account) : null;
+  }
+
+  async upsertPartnerReserveAccount(account: PartnerReserveAccount) {
+    const parsed = PartnerReserveAccountSchema.parse(account);
+    const index = this.partnerReserveAccounts.findIndex((item) => item.partnerId === parsed.partnerId);
+    if (index < 0) {
+      this.partnerReserveAccounts.unshift(clone(parsed));
+      return;
+    }
+    this.partnerReserveAccounts[index] = clone(parsed);
+  }
+
+  async listPartnerReserveLedgerEntries(partnerId?: string) {
+    return clone(this.partnerReserveLedgerEntries.filter((item) => !partnerId || item.partnerId === partnerId));
+  }
+
+  async insertPartnerReserveLedgerEntry(entry: PartnerReserveLedgerEntry) {
+    this.partnerReserveLedgerEntries.unshift(clone(PartnerReserveLedgerEntrySchema.parse(entry)));
   }
 
   async listRiskCases(filter: Partial<{ status: string; severity: string; entityType: string; ownerId: string; dateFrom: string; dateTo: string; provenance: string; }> = {}) {
@@ -1162,6 +1404,160 @@ export class PromotionAgentStore {
     });
   }
 
+  private deriveChannelTypeForLead(lead: AgentLead): ChannelProfile["channelType"] {
+    return lead.sourceType === "public_registry" ? "registry" : "direct_config";
+  }
+
+  private deriveChannelDiscoveryMethodForLead(lead: AgentLead): ChannelProfile["discoveryMethod"] {
+    return lead.sourceType === "public_registry" ? "poll" : "import";
+  }
+
+  private async ensureChannelProfileForLead(lead: AgentLead) {
+    const channelId = buildChannelProfileId(lead.sourceType, lead.source);
+    const existing = await this.repository.getChannelProfile(channelId);
+    const supportedReceipts = [
+      ...(lead.supportsDeliveryReceipt ? ["delivery"] : []),
+      ...(lead.supportsPresentationReceipt ? ["presented"] : []),
+    ];
+    const now = nowIso();
+    const profile = ChannelProfileSchema.parse({
+      channelId,
+      dataProvenance: lead.dataProvenance,
+      channelType: this.deriveChannelTypeForLead(lead),
+      operatorName: lead.source,
+      discoveryMethod: this.deriveChannelDiscoveryMethodForLead(lead),
+      onboardingMode: "assisted",
+      expectedReachProxy: lead.reachProxy,
+      supportsReceipts: supportedReceipts,
+      rateLimitPolicy: null,
+      costModel: null,
+      channelStatus:
+        lead.verificationStatus === "active" || lead.verificationStatus === "verified" ? "active" : "observe",
+      createdAt: existing?.createdAt ?? lead.discoveredAt,
+      updatedAt: now,
+    });
+    await this.repository.upsertChannelProfile(profile);
+    return profile;
+  }
+
+  private derivePartnerOnboardingStage(
+    lead: AgentLead,
+    readiness: PartnerReadiness,
+    partner: PartnerAgent | null,
+  ): PartnerOnboardingCase["currentStage"] {
+    if (partner?.status === "active") return "scaled";
+    if (partner?.status === "verified") return "pilot";
+    if (partner?.status === "reviewing" || partner?.status === "new") return "sandbox";
+    if (lead.verificationStatus === "active" || lead.verificationStatus === "verified") {
+      return readiness.readinessScore >= 0.85 ? "sandbox" : "verified";
+    }
+    return "lead";
+  }
+
+  private deriveCapabilityRiskTier(
+    lead: AgentLead,
+    readiness: PartnerReadiness,
+    partner: PartnerAgent | null,
+  ): CapabilityVerificationSnapshot["riskTier"] {
+    const trust = partner?.trustScore ?? lead.trustSeed;
+    if (trust >= 0.8 && readiness.blockers.length === 0) return "low";
+    if (trust >= 0.65 && readiness.blockers.length <= 2) return "medium";
+    return "high";
+  }
+
+  private deriveCapabilityRecommendedTier(
+    lead: AgentLead,
+    readiness: PartnerReadiness,
+    partner: PartnerAgent | null,
+  ): CapabilityVerificationSnapshot["recommendedTier"] {
+    if (partner?.status === "active") return "scale";
+    if (
+      Boolean(lead.endpointUrl) &&
+      readiness.checklist.auth &&
+      readiness.checklist.deliveryReceipt &&
+      readiness.checklist.presentationReceipt
+    ) {
+      return "pilot";
+    }
+    return "observe";
+  }
+
+  private async syncCanonicalPartnerArtifacts(
+    lead: AgentLead,
+    pipeline: RecruitmentPipeline,
+    tasks: OnboardingTask[],
+    readiness: PartnerReadiness,
+    partner: PartnerAgent | null,
+  ) {
+    const [channelProfile, existingCases, existingSnapshots] = await Promise.all([
+      this.ensureChannelProfileForLead(lead),
+      this.repository.listPartnerOnboardingCases(lead.agentId),
+      this.repository.listCapabilityVerificationSnapshots(lead.agentId),
+    ]);
+    const autoCaseId = buildAutoPartnerOnboardingCaseId(lead.agentId);
+    const autoSnapshotId = buildAutoCapabilitySnapshotId(lead.agentId);
+    const existingCase = existingCases.find((item) => item.caseId === autoCaseId) ?? null;
+    const existingSnapshot = existingSnapshots.find((item) => item.snapshotId === autoSnapshotId) ?? null;
+    const contractTaskDone = tasks.some((task) => task.taskType === "commercial_terms" && task.status === "done");
+    const blockedTask = tasks.find((task) => task.status === "blocked");
+    const nextOpenTask = tasks
+      .filter((task) => task.status !== "done")
+      .sort((left, right) => {
+        const leftDue = left.dueAt ? new Date(left.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+        const rightDue = right.dueAt ? new Date(right.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+        return leftDue - rightDue;
+      })[0];
+    const autoCase = PartnerOnboardingCaseSchema.parse({
+      caseId: autoCaseId,
+      dataProvenance: lead.dataProvenance,
+      agentLeadId: lead.agentId,
+      channelId: channelProfile.channelId,
+      currentStage: this.derivePartnerOnboardingStage(lead, readiness, partner),
+      contractStatus: partner ? "signed" : contractTaskDone ? "signed" : lead.assignedOwner ? "negotiating" : "not_started",
+      sandboxStatus:
+        partner?.status === "active" || partner?.status === "verified"
+          ? "passed"
+          : blockedTask
+            ? "failed"
+            : readiness.checklist.auth && readiness.checklist.deliveryReceipt && readiness.checklist.presentationReceipt
+              ? "ready"
+              : "not_ready",
+      pilotBudgetLimit: existingCase?.pilotBudgetLimit ?? null,
+      technicalOwner: existingCase?.technicalOwner ?? lead.verificationOwner ?? lead.assignedOwner ?? null,
+      businessOwner: existingCase?.businessOwner ?? lead.assignedOwner ?? null,
+      blockerCode: blockedTask?.taskType ?? (readiness.blockers[0] ?? null),
+      nextReviewAt: nextOpenTask?.dueAt ?? existingCase?.nextReviewAt ?? null,
+      launchedAt:
+        existingCase?.launchedAt ??
+        (partner?.status === "active" || partner?.status === "verified" ? nowIso() : null),
+      createdAt: existingCase?.createdAt ?? pipeline.createdAt,
+      updatedAt: nowIso(),
+    });
+    await this.repository.upsertPartnerOnboardingCase(autoCase);
+
+    const autoSnapshot = CapabilityVerificationSnapshotSchema.parse({
+      snapshotId: autoSnapshotId,
+      dataProvenance: lead.dataProvenance,
+      agentLeadId: lead.agentId,
+      publicCardValid: Boolean(lead.cardUrl && lead.sourceRef),
+      authTestPassed: readiness.checklist.auth,
+      opportunityTestPassed: Boolean(lead.endpointUrl) && (partner?.status !== "suspended"),
+      receiptTestPassed: readiness.checklist.deliveryReceipt && readiness.checklist.presentationReceipt,
+      presentationReceiptSupported: partner?.supportsPresentationReceipt ?? lead.supportsPresentationReceipt,
+      meanLatencyMs: existingSnapshot?.meanLatencyMs ?? null,
+      successRate7d:
+        existingSnapshot?.successRate7d ??
+        ((partner?.historicalQualityScore ?? lead.historicalQualityScore) > 0
+          ? partner?.historicalQualityScore ?? lead.historicalQualityScore
+          : null),
+      riskTier: this.deriveCapabilityRiskTier(lead, readiness, partner),
+      lastProbeAt: lead.lastVerifiedAt ?? existingSnapshot?.lastProbeAt ?? nowIso(),
+      recommendedTier: this.deriveCapabilityRecommendedTier(lead, readiness, partner),
+      createdAt: existingSnapshot?.createdAt ?? nowIso(),
+    });
+    await this.repository.upsertCapabilityVerificationSnapshot(autoSnapshot);
+  }
+
   private async promoteLeadToPartnerInternal(
     lead: AgentLead,
     overrides: Partial<Pick<PartnerAgent, "partnerId" | "dataProvenance" | "status" | "supportedCategories" | "slaTier" | "acceptsSponsored" | "supportsDisclosure" | "supportsDeliveryReceipt" | "supportsPresentationReceipt" | "authModes">> = {},
@@ -1397,16 +1793,17 @@ export class PromotionAgentStore {
     pipeline.nextStep = this.deriveNextStep(lead, existingPipeline, outreachTargets, tasks, readiness, partner, matchedCampaign);
     await this.repository.upsertRecruitmentPipeline(pipeline);
     await this.repository.upsertPartnerReadiness(readiness);
+    await this.syncCanonicalPartnerArtifacts(lead, pipeline, tasks, readiness, partner);
 
     if (!partner && readiness.overallStatus === "ready") {
       partner = await this.promoteLeadToPartnerInternal(lead, {}, "pipeline.auto", false);
       pipeline.stage = "promoted";
       pipeline.nextStep = "Partner promoted automatically. Monitor live performance.";
       pipeline.updatedAt = nowIso();
+      const promotedReadiness = this.derivePartnerReadiness(lead, pipelineId, tasks, partner);
       await this.repository.upsertRecruitmentPipeline(pipeline);
-      await this.repository.upsertPartnerReadiness(
-        this.derivePartnerReadiness(lead, pipelineId, tasks, partner),
-      );
+      await this.repository.upsertPartnerReadiness(promotedReadiness);
+      await this.syncCanonicalPartnerArtifacts(lead, pipeline, tasks, promotedReadiness, partner);
     }
     return pipeline;
   }
@@ -1467,6 +1864,83 @@ export class PromotionAgentStore {
     return "ops_manual";
   }
 
+  private assertDiscoverySourceUsesRealData(input: DiscoverySourceInput) {
+    assertNoPlaceholderText("discovery source name", input.name);
+    assertNoPlaceholderUrl("discovery source baseUrl", input.baseUrl, { allowLocal: true });
+    for (const [index, url] of input.seedUrls.entries()) {
+      assertNoPlaceholderUrl(`discovery source seedUrls[${index}]`, url, { allowLocal: true });
+    }
+  }
+
+  private assertLeadUsesRealData(lead: Pick<AgentLead, "providerOrg" | "cardUrl" | "endpointUrl" | "contactRef" | "evidenceRef">) {
+    assertNoPlaceholderText("lead providerOrg", lead.providerOrg);
+    assertNoPlaceholderUrl("lead cardUrl", lead.cardUrl, { allowLocal: true });
+    assertNoPlaceholderUrl("lead endpointUrl", lead.endpointUrl, { allowLocal: true });
+    if (lead.contactRef?.includes("@")) {
+      assertNoPlaceholderEmail("lead contactRef", lead.contactRef);
+    }
+    if (lead.evidenceRef?.startsWith("http://") || lead.evidenceRef?.startsWith("https://")) {
+      assertNoPlaceholderUrl("lead evidenceRef", lead.evidenceRef, { allowLocal: true });
+    } else {
+      assertNoPlaceholderText("lead evidenceRef", lead.evidenceRef);
+    }
+  }
+
+  private assertCampaignUsesRealData(input: CampaignDraftInput) {
+    assertNoPlaceholderText("campaign advertiser", input.advertiser);
+    assertNoPlaceholderText("campaign product.name", input.product.name);
+    assertNoPlaceholderText("campaign product.description", input.product.description);
+    assertNoPlaceholderText("campaign disclosureText", input.disclosureText);
+    assertNoPlaceholderUrl("campaign sourceDocumentUrl", input.sourceDocumentUrl, { allowLocal: true });
+    for (const [index, endpoint] of input.product.actionEndpoints.entries()) {
+      assertNoPlaceholderUrl(`campaign product.actionEndpoints[${index}]`, endpoint, { allowLocal: true });
+    }
+    for (const [index, reference] of input.proofReferences.entries()) {
+      assertNoPlaceholderText(`campaign proofReferences[${index}].label`, reference.label);
+      assertNoPlaceholderUrl(`campaign proofReferences[${index}].url`, reference.url, { allowLocal: true });
+    }
+    if (input.linkBundle) {
+      assertNoPlaceholderUrl("campaign linkBundle.homepageUrl", input.linkBundle.homepageUrl, { allowLocal: true });
+      assertNoPlaceholderUrl("campaign linkBundle.productDetailUrl", input.linkBundle.productDetailUrl, { allowLocal: true });
+      assertNoPlaceholderUrl("campaign linkBundle.proofUrl", input.linkBundle.proofUrl, { allowLocal: true });
+      assertNoPlaceholderUrl("campaign linkBundle.conversionUrl", input.linkBundle.conversionUrl, { allowLocal: true });
+      assertNoPlaceholderUrl("campaign linkBundle.contactUrl", input.linkBundle.contactUrl, { allowLocal: true });
+    }
+  }
+
+  private assertEvidenceAssetUsesRealData(input: EvidenceAssetInput) {
+    assertNoPlaceholderText("evidence asset label", input.label);
+    assertNoPlaceholderUrl("evidence asset url", input.url, { allowLocal: true });
+  }
+
+  private assertOpcProfileUsesRealData(input: OPCProfileInput) {
+    assertNoPlaceholderText("opc legalEntityName", input.legalEntityName);
+    assertNoPlaceholderText("opc registrationId", input.registrationId);
+    assertNoPlaceholderText("opc businessModelPrimary", input.businessModelPrimary);
+    assertNoPlaceholderUrl("opc websiteUrl", input.websiteUrl, { allowLocal: true });
+    assertNoPlaceholderUrl("opc productPageUrl", input.productPageUrl, { allowLocal: true });
+    assertNoPlaceholderUrl("opc coursePageUrl", input.coursePageUrl, { allowLocal: true });
+  }
+
+  private assertCommercialExtensionUsesRealData(input: CommercialExtensionInput) {
+    assertNoPlaceholderText("commercial extension version", input.extensionVersion);
+    assertNoPlaceholderUrl("commercial extension policyEndpoint", input.policyEndpoint, { allowLocal: true });
+  }
+
+  private assertOutreachContactUsesRealData(channel: OutreachTarget["channel"], contactPoint: string) {
+    if (channel === "email") {
+      assertNoPlaceholderEmail("outreach contactPoint", contactPoint);
+      return;
+    }
+
+    if (/^https?:\/\//i.test(contactPoint)) {
+      assertNoPlaceholderUrl("outreach contactPoint", contactPoint, { allowLocal: true });
+      return;
+    }
+
+    assertNoPlaceholderText("outreach contactPoint", contactPoint);
+  }
+
   private async inferEntityProvenance(
     entityType: "campaign" | "partner" | "agent_lead" | "settlement" | "receipt",
     entityId: string,
@@ -1491,6 +1965,69 @@ export class PromotionAgentStore {
 
   private async findPartnerByLeadId(leadId: string) {
     return (await this.repository.listPartners()).find((partner) => partner.agentLeadId === leadId) ?? null;
+  }
+
+  private async findPartner(partnerId: string) {
+    return (await this.repository.listPartners()).find((partner) => partner.partnerId === partnerId) ?? null;
+  }
+
+  private clampTrustScore(value: number) {
+    return Math.max(0, Math.min(1, value));
+  }
+
+  private weightedReputationDelta(record: ReputationRecord) {
+    if (record.delta >= 0) {
+      return record.delta * TRUST_DELTA_WEIGHT;
+    }
+
+    const multiplier =
+      record.disputeStatus === "under_review"
+        ? UNDER_REVIEW_DELTA_MULTIPLIER
+        : record.disputeStatus === "resolved"
+          ? 0
+          : 1;
+    return record.delta * TRUST_DELTA_WEIGHT * multiplier;
+  }
+
+  private applyGovernanceToPartner(
+    partner: PartnerAgent,
+    reputationRecords: ReputationRecord[],
+    settlements: SettlementReceipt[],
+  ) {
+    const partnerRecords = reputationRecords.filter((record) => record.partnerId === partner.partnerId);
+    const disputedSettlements = settlements.filter(
+      (settlement) => settlement.partnerId === partner.partnerId && settlement.disputeFlag,
+    );
+    const reputationAdjustment = partnerRecords.reduce(
+      (total, record) => total + this.weightedReputationDelta(record),
+      0,
+    );
+    const settlementAdjustment = disputedSettlements.length * DISPUTED_SETTLEMENT_TRUST_PENALTY;
+    const trustScore = this.clampTrustScore(partner.trustScore + reputationAdjustment - settlementAdjustment);
+
+    return PartnerAgentSchema.parse({
+      ...partner,
+      trustScore,
+    });
+  }
+
+  private async listGovernedPartners() {
+    const [partners, reputationRecords, settlements] = await Promise.all([
+      this.repository.listPartners(),
+      this.repository.listReputationRecords(),
+      this.repository.listSettlements(),
+    ]);
+
+    return partners.map((partner) => this.applyGovernanceToPartner(partner, reputationRecords, settlements));
+  }
+
+  private async upsertReputationRecord(record: ReputationRecord) {
+    const existing = await this.repository.getReputationRecord(record.recordId);
+    if (existing) {
+      await this.repository.updateReputationRecord(record);
+      return;
+    }
+    await this.repository.insertReputationRecord(record);
   }
 
   private countByProvenance(records: Array<{ dataProvenance: DataProvenance }>) {
@@ -1539,7 +2076,7 @@ export class PromotionAgentStore {
   private async rebuildBuyerAgentScorecards() {
     const [leads, partners, receipts, settlements] = await Promise.all([
       this.repository.listLeads(),
-      this.repository.listPartners(),
+      this.listGovernedPartners(),
       this.repository.listEventReceipts(),
       this.repository.listSettlements(),
     ]);
@@ -1583,12 +2120,144 @@ export class PromotionAgentStore {
     return wallet;
   }
 
+  private async ensurePartnerReserveAccount(partnerId: string, currency = PARTNER_RESERVE_CURRENCY) {
+    const partner = await this.findPartner(partnerId);
+    if (!partner) {
+      throw new Error("Partner not found.");
+    }
+    const existing = await this.repository.getPartnerReserveAccount(partnerId);
+    if (existing) {
+      return existing;
+    }
+
+    const account = PartnerReserveAccountSchema.parse({
+      partnerId,
+      currency,
+      availableAmount: 0,
+      frozenAmount: 0,
+      slashedAmount: 0,
+      updatedAt: nowIso(),
+    });
+    await this.repository.upsertPartnerReserveAccount(account);
+    return account;
+  }
+
+  private async appendPartnerReserveLedgerEntry(
+    account: PartnerReserveAccount,
+    entryType: PartnerReserveLedgerEntry["entryType"],
+    amount: number,
+    sourceRef: string,
+    reasonType: string,
+  ) {
+    if (amount <= 0) {
+      return null;
+    }
+
+    const entry = PartnerReserveLedgerEntrySchema.parse({
+      entryId: `prl_${crypto.randomUUID().slice(0, 10)}`,
+      partnerId: account.partnerId,
+      entryType,
+      amount,
+      currency: account.currency,
+      balanceAvailableAfter: account.availableAmount,
+      balanceFrozenAfter: account.frozenAmount,
+      balanceSlashedAfter: account.slashedAmount,
+      sourceRef,
+      reasonType,
+      occurredAt: nowIso(),
+    });
+    await this.repository.insertPartnerReserveLedgerEntry(entry);
+    return entry;
+  }
+
+  async getPartnerReserveAccount(partnerId: string) {
+    return this.ensurePartnerReserveAccount(partnerId);
+  }
+
+  async listPartnerReserveLedgerEntries(partnerId?: string) {
+    return this.repository.listPartnerReserveLedgerEntries(partnerId);
+  }
+
+  async depositPartnerReserve(
+    partnerId: string,
+    amount: number,
+    sourceRef = "partner_reserve.manual_deposit",
+    reasonType = "manual_deposit",
+  ) {
+    if (amount <= 0) {
+      throw new Error("Reserve deposit amount must be positive.");
+    }
+    const account = await this.ensurePartnerReserveAccount(partnerId);
+    account.availableAmount = Number((account.availableAmount + amount).toFixed(2));
+    account.updatedAt = nowIso();
+    await this.repository.upsertPartnerReserveAccount(account);
+    await this.appendPartnerReserveLedgerEntry(account, "deposit", amount, sourceRef, reasonType);
+    return account;
+  }
+
+  private async freezePartnerReserve(partnerId: string, requestedAmount: number, sourceRef: string, reasonType: string) {
+    const account = await this.ensurePartnerReserveAccount(partnerId);
+    const amount = Math.min(account.availableAmount, Math.max(0, requestedAmount));
+    if (amount <= 0) {
+      return { account, amount: 0 };
+    }
+    account.availableAmount = Number((account.availableAmount - amount).toFixed(2));
+    account.frozenAmount = Number((account.frozenAmount + amount).toFixed(2));
+    account.updatedAt = nowIso();
+    await this.repository.upsertPartnerReserveAccount(account);
+    await this.appendPartnerReserveLedgerEntry(account, "freeze", amount, sourceRef, reasonType);
+    return { account, amount };
+  }
+
+  private async releasePartnerReserve(partnerId: string, requestedAmount: number, sourceRef: string, reasonType: string) {
+    const account = await this.ensurePartnerReserveAccount(partnerId);
+    const amount = Math.min(account.frozenAmount, Math.max(0, requestedAmount));
+    if (amount <= 0) {
+      return { account, amount: 0 };
+    }
+    account.frozenAmount = Number((account.frozenAmount - amount).toFixed(2));
+    account.availableAmount = Number((account.availableAmount + amount).toFixed(2));
+    account.updatedAt = nowIso();
+    await this.repository.upsertPartnerReserveAccount(account);
+    await this.appendPartnerReserveLedgerEntry(account, "release", amount, sourceRef, reasonType);
+    return { account, amount };
+  }
+
+  private async slashPartnerReserve(partnerId: string, requestedAmount: number, sourceRef: string, reasonType: string) {
+    const account = await this.ensurePartnerReserveAccount(partnerId);
+    const amount = Math.min(account.frozenAmount, Math.max(0, requestedAmount));
+    if (amount <= 0) {
+      return { account, amount: 0 };
+    }
+    account.frozenAmount = Number((account.frozenAmount - amount).toFixed(2));
+    account.slashedAmount = Number((account.slashedAmount + amount).toFixed(2));
+    account.updatedAt = nowIso();
+    await this.repository.upsertPartnerReserveAccount(account);
+    await this.appendPartnerReserveLedgerEntry(account, "slash", amount, sourceRef, reasonType);
+    return { account, amount };
+  }
+
+  private async restorePartnerReserve(partnerId: string, requestedAmount: number, sourceRef: string, reasonType: string) {
+    const account = await this.ensurePartnerReserveAccount(partnerId);
+    const amount = Math.min(account.slashedAmount, Math.max(0, requestedAmount));
+    if (amount <= 0) {
+      return { account, amount: 0 };
+    }
+    account.slashedAmount = Number((account.slashedAmount - amount).toFixed(2));
+    account.availableAmount = Number((account.availableAmount + amount).toFixed(2));
+    account.updatedAt = nowIso();
+    await this.repository.upsertPartnerReserveAccount(account);
+    await this.appendPartnerReserveLedgerEntry(account, "restore", amount, sourceRef, reasonType);
+    return { account, amount };
+  }
+
   async listLeads() {
     return this.repository.listLeads();
   }
 
   async upsertLeadRecord(lead: AgentLead) {
     const parsed = AgentLeadSchema.parse(lead);
+    this.assertLeadUsesRealData(parsed);
     await this.repository.upsertLead(parsed);
     await this.ensurePipelineArtifactsForLead(parsed);
     await this.recordAuditEvent(
@@ -1616,6 +2285,7 @@ export class PromotionAgentStore {
   }
 
   async createDiscoverySource(input: DiscoverySourceInput) {
+    this.assertDiscoverySourceUsesRealData(input);
     return this.repository.createDiscoverySource(input);
   }
 
@@ -1650,6 +2320,12 @@ export class PromotionAgentStore {
 
     run.discoveredCount = crawled.leads.length;
     for (const lead of crawled.leads) {
+      try {
+        this.assertLeadUsesRealData(lead);
+      } catch (error) {
+        run.errors.push(error instanceof Error ? error.message : "Lead contains placeholder data.");
+        continue;
+      }
       const existing = byDedupe.get(lead.dedupeKey);
       if (existing) {
         const merged: AgentLead = AgentLeadSchema.parse({
@@ -1714,7 +2390,7 @@ export class PromotionAgentStore {
   }
 
   async listPartners(filter: Partial<{ provenance: string }> = {}) {
-    const partners = await this.repository.listPartners();
+    const partners = await this.listGovernedPartners();
     return partners.filter((partner) => this.matchesProvenance(partner.dataProvenance, filter.provenance));
   }
 
@@ -1846,6 +2522,7 @@ export class PromotionAgentStore {
     const pipeline = await this.repository.getRecruitmentPipeline(pipelineId);
     if (!pipeline) return null;
     const parsed = OutreachTargetInputSchema.parse(input);
+    this.assertOutreachContactUsesRealData(parsed.channel, parsed.contactPoint);
     const lead = await this.repository.getLead(pipeline.leadId);
     const matchedCampaign = lead
       ? await this.findBestOutreachCampaignForLead(lead, pipeline.targetPersona)
@@ -1918,6 +2595,10 @@ export class PromotionAgentStore {
         status: "done",
         completedAt: nowIso(),
       });
+    }
+    const lead = await this.repository.getLead(target.leadId);
+    if (lead) {
+      await this.ensurePipelineArtifactsForLead(lead);
     }
     return target;
   }
@@ -2070,6 +2751,8 @@ export class PromotionAgentStore {
       }),
     );
 
+    await this.ensurePipelineArtifactsForLead(lead);
+
     return {
       target,
       pipeline,
@@ -2104,10 +2787,10 @@ export class PromotionAgentStore {
       updatedAt: nowIso(),
     });
     await this.repository.upsertOnboardingTask(task);
-    pipeline.stage = pipeline.stage === "replied" || pipeline.stage === "qualified" || pipeline.stage === "outreach" ? "onboarding" : pipeline.stage;
-    pipeline.lastActivityAt = nowIso();
-    pipeline.updatedAt = nowIso();
-    await this.repository.upsertRecruitmentPipeline(pipeline);
+    const lead = await this.repository.getLead(pipeline.leadId);
+    if (lead) {
+      await this.ensurePipelineArtifactsForLead(lead);
+    }
     return task;
   }
 
@@ -2126,20 +2809,9 @@ export class PromotionAgentStore {
     task.completedAt = status === "done" ? nowIso() : null;
     await this.repository.upsertOnboardingTask(task);
 
-    const [pipeline, lead, partner] = await Promise.all([
-      this.repository.getRecruitmentPipeline(task.pipelineId),
-      this.repository.getLead(task.leadId),
-      this.findPartnerByLeadId(task.leadId),
-    ]);
-    if (pipeline && lead) {
-      const tasks = await this.repository.listOnboardingTasks(task.pipelineId);
-      pipeline.stage = this.derivePipelineStage(lead, partner, tasks);
-      pipeline.lastActivityAt = nowIso();
-      pipeline.updatedAt = nowIso();
-      await this.repository.upsertRecruitmentPipeline(pipeline);
-      await this.repository.upsertPartnerReadiness(
-        this.derivePartnerReadiness(lead, pipeline.pipelineId, tasks, partner),
-      );
+    const lead = await this.repository.getLead(task.leadId);
+    if (lead) {
+      await this.ensurePipelineArtifactsForLead(lead);
     }
     return task;
   }
@@ -2328,6 +3000,20 @@ export class PromotionAgentStore {
     disclosureRequired?: boolean;
   }) {
     const workspaceId = input.workspaceId ?? this.currentWorkspaceId();
+    const campaign = await this.repository.getCampaign(input.campaignId);
+    if (!campaign) {
+      throw new Error("Campaign not found.");
+    }
+    if (campaign.status !== "active") {
+      throw new Error("Campaign must be active before creating a promotion run.");
+    }
+    const opcGate = await this.evaluateCampaignOpcGate(campaign.opcProfileId);
+    campaign.opcReviewDecision = opcGate.reviewDecision;
+    campaign.scaleEligibility = opcGate.scaleEligibility;
+    await this.repository.upsertCampaign(campaign);
+    if (!opcGate.activationAllowed) {
+      throw new Error(`Campaign is blocked by OPC review: ${opcGate.reason ?? opcGate.reviewDecision ?? "unknown"}.`);
+    }
     const { subscription } = await this.ensureWorkspaceBillingState(workspaceId);
     const scorecards = (await this.rebuildBuyerAgentScorecards())
       .filter((card) => card.isCommerciallyEligible)
@@ -2337,8 +3023,12 @@ export class PromotionAgentStore {
       });
 
     const plan = PROMOTION_PLANS.find((item) => item.planId === subscription.planId) ?? PROMOTION_PLANS[0];
+    const qualifiedBuyerAgentLimit =
+      campaign.scaleEligibility === "limited"
+        ? Math.min(plan.maxQualifiedBuyerAgentsPerWave, PROBATION_MAX_QUALIFIED_BUYER_AGENTS)
+        : plan.maxQualifiedBuyerAgentsPerWave;
     const selectedScorecards = scorecards
-      .slice(0, plan.maxQualifiedBuyerAgentsPerWave)
+      .slice(0, qualifiedBuyerAgentLimit)
       .filter(
         (
           card,
@@ -2373,6 +3063,8 @@ export class PromotionAgentStore {
       taskType: input.taskType,
       constraints: {
         geo: input.geo ?? [],
+        scaleEligibility: campaign.scaleEligibility,
+        opcReviewDecision: campaign.opcReviewDecision,
       },
       qualifiedBuyerAgentsCount: selectedPartnerIds.length,
       coverageCreditsCharged,
@@ -2426,7 +3118,7 @@ export class PromotionAgentStore {
 
     const [targets, partners, campaign] = await Promise.all([
       this.repository.listPromotionRunTargets(promotionRunId),
-      this.repository.listPartners(),
+      this.listGovernedPartners(),
       this.repository.getCampaign(run.campaignId),
     ]);
     const partnerById = new Map(partners.map((partner) => [partner.partnerId, partner]));
@@ -2458,6 +3150,37 @@ export class PromotionAgentStore {
         target.lastError = !campaign ? "campaign_not_found" : "partner_not_found";
         target.responseCode = !campaign ? "CAMPAIGN_NOT_FOUND" : "PARTNER_NOT_FOUND";
         await this.repository.upsertPromotionRunTarget(target);
+        continue;
+      }
+
+      if (partner.trustScore < MIN_GOVERNED_TRUST_FOR_DISPATCH) {
+        target.dispatchAttempts += 1;
+        target.lastAttemptAt = dispatchedAt;
+        target.updatedAt = dispatchedAt;
+        target.status = "failed";
+        target.lastError = "partner_trust_below_dispatch_threshold";
+        target.responseCode = "TRUST_BELOW_THRESHOLD";
+        target.cooldownUntil = null;
+        target.nextRetryAt = null;
+        target.acceptedAt = null;
+        await this.repository.upsertPromotionRunTarget(target);
+        await this.recordAuditEvent(
+          createAuditEvent({
+            traceId: run.promotionRunId,
+            entityType: "delivery",
+            entityId: target.targetId,
+            action: "dispatch_promotion_run_target",
+            status: "blocked",
+            actorType: "system",
+            actorId: "promotion.dispatch",
+            details: {
+              partnerId: target.partnerId,
+              providerOrg: target.providerOrg,
+              trustScore: partner.trustScore,
+              responseCode: target.responseCode,
+            },
+          }),
+        );
         continue;
       }
 
@@ -2640,6 +3363,7 @@ export class PromotionAgentStore {
 
   async createEvidenceAsset(input: EvidenceAssetInput) {
     const parsed = EvidenceAssetInputSchema.parse(input);
+    this.assertEvidenceAssetUsesRealData(parsed);
     const campaign = await this.repository.getCampaign(parsed.campaignId);
     const asset = EvidenceAssetSchema.parse({
       assetId: `asset_${crypto.randomUUID().slice(0, 8)}`,
@@ -2654,6 +3378,339 @@ export class PromotionAgentStore {
     });
     await this.repository.insertEvidenceAsset(asset);
     return asset;
+  }
+
+  async listOpcProfiles(
+    filter: Partial<{ provenance: string; entityVerificationStatus: string; primaryBusinessType: string }> = {},
+  ) {
+    const profiles = await this.repository.listOpcProfiles();
+    return profiles.filter((profile) => {
+      if (filter.provenance && !this.matchesProvenance(profile.dataProvenance, filter.provenance)) return false;
+      if (filter.entityVerificationStatus && profile.entityVerificationStatus !== filter.entityVerificationStatus) return false;
+      if (filter.primaryBusinessType && profile.primaryBusinessType !== filter.primaryBusinessType) return false;
+      return true;
+    });
+  }
+
+  async createOpcProfile(input: OPCProfileInput) {
+    const parsed = OPCProfileInputSchema.parse(input);
+    this.assertOpcProfileUsesRealData(parsed);
+    const now = nowIso();
+    const profile = OPCProfileSchema.parse({
+      opcId: `opc_${crypto.randomUUID().slice(0, 8)}`,
+      dataProvenance: parsed.dataProvenance ?? this.defaultMutationProvenance("risk"),
+      legalEntityName: parsed.legalEntityName,
+      registrationId: parsed.registrationId,
+      operatorType: parsed.operatorType,
+      primaryBusinessType: parsed.primaryBusinessType,
+      businessModelPrimary: parsed.businessModelPrimary,
+      websiteUrl: parsed.websiteUrl ?? null,
+      productPageUrl: parsed.productPageUrl ?? null,
+      coursePageUrl: parsed.coursePageUrl ?? null,
+      entityVerificationStatus: parsed.entityVerificationStatus,
+      onboardingChannel: parsed.onboardingChannel ?? null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await this.repository.upsertOpcProfile(profile);
+    return profile;
+  }
+
+  async listRevenueEvidence(filter: Partial<{ opcId: string; provenance: string }> = {}) {
+    const evidence = await this.repository.listRevenueEvidence(filter.opcId);
+    return evidence.filter((item) => (filter.provenance ? this.matchesProvenance(item.dataProvenance, filter.provenance) : true));
+  }
+
+  async createRevenueEvidence(input: RevenueEvidenceInput) {
+    const parsed = RevenueEvidenceInputSchema.parse(input);
+    const profile = await this.repository.getOpcProfile(parsed.opcId);
+    if (!profile) {
+      throw new Error("OPC profile not found.");
+    }
+    const now = nowIso();
+    const evidence = RevenueEvidenceSchema.parse({
+      evidenceId: `rev_${crypto.randomUUID().slice(0, 8)}`,
+      dataProvenance: parsed.dataProvenance ?? profile.dataProvenance,
+      ...parsed,
+      bankInflowAmount: parsed.bankInflowAmount ?? null,
+      orderCount: parsed.orderCount ?? null,
+      refundAmount: parsed.refundAmount ?? null,
+      chargebackAmount: parsed.chargebackAmount ?? null,
+      variableCostEstimate: parsed.variableCostEstimate ?? null,
+      contributionProfitEstimate: parsed.contributionProfitEstimate ?? null,
+      sourceRef: parsed.sourceRef ?? null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await this.repository.upsertRevenueEvidence(evidence);
+    return evidence;
+  }
+
+  async listVerificationReviews(filter: Partial<{ opcId: string; decision: string; provenance: string }> = {}) {
+    const reviews = await this.repository.listVerificationReviews(filter.opcId);
+    return reviews.filter((review) => {
+      if (filter.provenance && !this.matchesProvenance(review.dataProvenance, filter.provenance)) return false;
+      if (filter.decision && review.decision !== filter.decision) return false;
+      return true;
+    });
+  }
+
+  async createVerificationReview(input: VerificationReviewInput) {
+    const parsed = VerificationReviewInputSchema.parse(input);
+    const profile = await this.repository.getOpcProfile(parsed.opcId);
+    if (!profile) {
+      throw new Error("OPC profile not found.");
+    }
+    const review = VerificationReviewSchema.parse({
+      reviewId: `vrf_${crypto.randomUUID().slice(0, 8)}`,
+      dataProvenance: parsed.dataProvenance ?? profile.dataProvenance,
+      ...parsed,
+      externalCustomerRevenueRatio: parsed.externalCustomerRevenueRatio ?? null,
+      knowledgeRevenueRatio: parsed.knowledgeRevenueRatio ?? null,
+      customerSampleStatus: parsed.customerSampleStatus ?? null,
+      pageClassification: parsed.pageClassification ?? null,
+      reviewerOwner: parsed.reviewerOwner ?? null,
+      validUntil: parsed.validUntil ?? null,
+      decisionReason: parsed.decisionReason ?? null,
+      reviewedAt: nowIso(),
+    });
+    await this.repository.upsertVerificationReview(review);
+    return review;
+  }
+
+  async listMonthlyHealthSnapshots(filter: Partial<{ opcId: string; provenance: string }> = {}) {
+    const snapshots = await this.repository.listMonthlyHealthSnapshots(filter.opcId);
+    return snapshots.filter((snapshot) => (filter.provenance ? this.matchesProvenance(snapshot.dataProvenance, filter.provenance) : true));
+  }
+
+  async createMonthlyHealthSnapshot(input: MonthlyHealthSnapshotInput) {
+    const parsed = MonthlyHealthSnapshotInputSchema.parse(input);
+    const profile = await this.repository.getOpcProfile(parsed.opcId);
+    if (!profile) {
+      throw new Error("OPC profile not found.");
+    }
+    const snapshot = MonthlyHealthSnapshotSchema.parse({
+      snapshotId: `mhs_${crypto.randomUUID().slice(0, 8)}`,
+      dataProvenance: parsed.dataProvenance ?? profile.dataProvenance,
+      ...parsed,
+      netCashIn: parsed.netCashIn ?? null,
+      contributionProfitEstimate: parsed.contributionProfitEstimate ?? null,
+      refundRate: parsed.refundRate ?? null,
+      chargebackRate: parsed.chargebackRate ?? null,
+      externalCustomerRevenueRatio: parsed.externalCustomerRevenueRatio ?? null,
+      knowledgeRevenueRatio: parsed.knowledgeRevenueRatio ?? null,
+      trafficConcentration: parsed.trafficConcentration ?? null,
+      riskDelta: parsed.riskDelta ?? null,
+      statusRecommendation: parsed.statusRecommendation ?? null,
+      escalationRequired: parsed.escalationRequired ?? false,
+      createdAt: nowIso(),
+    });
+    await this.repository.upsertMonthlyHealthSnapshot(snapshot);
+    return snapshot;
+  }
+
+  async listChannelProfiles(filter: Partial<{ channelType: string; channelStatus: string; provenance: string }> = {}) {
+    const profiles = await this.repository.listChannelProfiles();
+    return profiles.filter((profile) => {
+      if (filter.provenance && !this.matchesProvenance(profile.dataProvenance, filter.provenance)) return false;
+      if (filter.channelType && profile.channelType !== filter.channelType) return false;
+      if (filter.channelStatus && profile.channelStatus !== filter.channelStatus) return false;
+      return true;
+    });
+  }
+
+  async createChannelProfile(input: ChannelProfileInput) {
+    const parsed = ChannelProfileInputSchema.parse(input);
+    const now = nowIso();
+    const profile = ChannelProfileSchema.parse({
+      channelId: `chn_${crypto.randomUUID().slice(0, 8)}`,
+      dataProvenance: parsed.dataProvenance ?? this.defaultMutationProvenance("risk"),
+      channelType: parsed.channelType,
+      operatorName: parsed.operatorName ?? null,
+      discoveryMethod: parsed.discoveryMethod,
+      onboardingMode: parsed.onboardingMode,
+      expectedReachProxy: parsed.expectedReachProxy ?? null,
+      supportsReceipts: parsed.supportsReceipts,
+      rateLimitPolicy: parsed.rateLimitPolicy ?? null,
+      costModel: parsed.costModel ?? null,
+      channelStatus: parsed.channelStatus,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await this.repository.upsertChannelProfile(profile);
+    return profile;
+  }
+
+  async listCommercialExtensions(filter: Partial<{ partnerId: string; provenance: string }> = {}) {
+    const extensions = await this.repository.listCommercialExtensions(filter.partnerId);
+    return extensions.filter((extension) => (filter.provenance ? this.matchesProvenance(extension.dataProvenance, filter.provenance) : true));
+  }
+
+  async createCommercialExtension(input: CommercialExtensionInput) {
+    const parsed = CommercialExtensionInputSchema.parse(input);
+    this.assertCommercialExtensionUsesRealData(parsed);
+    const partner = await this.findPartner(parsed.partnerId);
+    if (!partner) {
+      throw new Error("Partner not found.");
+    }
+    const now = nowIso();
+    const extension = CommercialExtensionSchema.parse({
+      extensionId: `ext_${crypto.randomUUID().slice(0, 8)}`,
+      dataProvenance: parsed.dataProvenance ?? partner.dataProvenance,
+      ...parsed,
+      billingModes: parsed.billingModes,
+      supportedIntentDomains: parsed.supportedIntentDomains,
+      maxQps: parsed.maxQps ?? null,
+      policyEndpoint: parsed.policyEndpoint ?? null,
+      contractRequired: parsed.contractRequired ?? false,
+      signatureScheme: parsed.signatureScheme ?? null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await this.repository.upsertCommercialExtension(extension);
+    return extension;
+  }
+
+  async listPartnerOnboardingCases(
+    filter: Partial<{ agentLeadId: string; channelId: string; currentStage: string; provenance: string }> = {},
+  ) {
+    const cases = await this.repository.listPartnerOnboardingCases(filter.agentLeadId);
+    return cases.filter((item) => {
+      if (filter.provenance && !this.matchesProvenance(item.dataProvenance, filter.provenance)) return false;
+      if (filter.channelId && item.channelId !== filter.channelId) return false;
+      if (filter.currentStage && item.currentStage !== filter.currentStage) return false;
+      return true;
+    });
+  }
+
+  async createPartnerOnboardingCase(input: PartnerOnboardingCaseInput) {
+    const parsed = PartnerOnboardingCaseInputSchema.parse(input);
+    const [lead, channel] = await Promise.all([
+      this.repository.getLead(parsed.agentLeadId),
+      this.repository.getChannelProfile(parsed.channelId),
+    ]);
+    if (!lead) {
+      throw new Error("Agent lead not found.");
+    }
+    if (!channel) {
+      throw new Error("Channel profile not found.");
+    }
+    const now = nowIso();
+    const onboardingCase = PartnerOnboardingCaseSchema.parse({
+      caseId: `obc_${crypto.randomUUID().slice(0, 8)}`,
+      dataProvenance: parsed.dataProvenance ?? lead.dataProvenance,
+      ...parsed,
+      contractStatus: parsed.contractStatus ?? null,
+      sandboxStatus: parsed.sandboxStatus ?? null,
+      pilotBudgetLimit: parsed.pilotBudgetLimit ?? null,
+      technicalOwner: parsed.technicalOwner ?? null,
+      businessOwner: parsed.businessOwner ?? null,
+      blockerCode: parsed.blockerCode ?? null,
+      nextReviewAt: parsed.nextReviewAt ?? null,
+      launchedAt: parsed.launchedAt ?? null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await this.repository.upsertPartnerOnboardingCase(onboardingCase);
+    return onboardingCase;
+  }
+
+  async listCapabilityVerificationSnapshots(filter: Partial<{ agentLeadId: string; recommendedTier: string; provenance: string }> = {}) {
+    const snapshots = await this.repository.listCapabilityVerificationSnapshots(filter.agentLeadId);
+    return snapshots.filter((snapshot) => {
+      if (filter.provenance && !this.matchesProvenance(snapshot.dataProvenance, filter.provenance)) return false;
+      if (filter.recommendedTier && snapshot.recommendedTier !== filter.recommendedTier) return false;
+      return true;
+    });
+  }
+
+  async createCapabilityVerificationSnapshot(input: CapabilityVerificationSnapshotInput) {
+    const parsed = CapabilityVerificationSnapshotInputSchema.parse(input);
+    const lead = await this.repository.getLead(parsed.agentLeadId);
+    if (!lead) {
+      throw new Error("Agent lead not found.");
+    }
+    const snapshot = CapabilityVerificationSnapshotSchema.parse({
+      snapshotId: `cvs_${crypto.randomUUID().slice(0, 8)}`,
+      dataProvenance: parsed.dataProvenance ?? lead.dataProvenance,
+      ...parsed,
+      meanLatencyMs: parsed.meanLatencyMs ?? null,
+      successRate7d: parsed.successRate7d ?? null,
+      riskTier: parsed.riskTier ?? null,
+      lastProbeAt: parsed.lastProbeAt ?? null,
+      recommendedTier: parsed.recommendedTier ?? null,
+      createdAt: nowIso(),
+    });
+    await this.repository.upsertCapabilityVerificationSnapshot(snapshot);
+    return snapshot;
+  }
+
+  private async evaluateCampaignOpcGate(opcProfileId: string | null): Promise<CampaignOpcGate> {
+    if (!opcProfileId) {
+      return {
+        reviewDecision: null,
+        scaleEligibility: "full",
+        activationAllowed: true,
+        reason: null,
+      };
+    }
+
+    const profile = await this.repository.getOpcProfile(opcProfileId);
+    if (!profile) {
+      return {
+        reviewDecision: "manual_review",
+        scaleEligibility: "blocked",
+        activationAllowed: false,
+        reason: "opc_profile_missing",
+      };
+    }
+
+    if (profile.entityVerificationStatus !== "passed") {
+      return {
+        reviewDecision: "manual_review",
+        scaleEligibility: "blocked",
+        activationAllowed: false,
+        reason: "opc_entity_not_verified",
+      };
+    }
+
+    const latestReview = (await this.repository.listVerificationReviews(opcProfileId))
+      .slice()
+      .sort((left, right) => new Date(right.reviewedAt).getTime() - new Date(left.reviewedAt).getTime())[0];
+
+    if (!latestReview) {
+      return {
+        reviewDecision: "manual_review",
+        scaleEligibility: "blocked",
+        activationAllowed: false,
+        reason: "opc_review_missing",
+      };
+    }
+
+    if (latestReview.decision === "approved") {
+      return {
+        reviewDecision: latestReview.decision,
+        scaleEligibility: "full",
+        activationAllowed: true,
+        reason: null,
+      };
+    }
+
+    if (latestReview.decision === "probation") {
+      return {
+        reviewDecision: latestReview.decision,
+        scaleEligibility: "limited",
+        activationAllowed: true,
+        reason: "opc_probation_limited_scale",
+      };
+    }
+
+    return {
+      reviewDecision: latestReview.decision,
+      scaleEligibility: "blocked",
+      activationAllowed: false,
+      reason: latestReview.decision === "rejected" ? "opc_rejected" : "opc_manual_review_required",
+    };
   }
 
   async listRiskCases(filter: Partial<{ status: string; severity: string; entityType: string; ownerId: string; dateFrom: string; dateTo: string; provenance: string; }> = {}) {
@@ -2678,18 +3735,24 @@ export class PromotionAgentStore {
     });
     await this.repository.insertRiskCase(riskCase);
     if (parsed.entityType === "partner") {
-      await this.repository.insertReputationRecord(
-        ReputationRecordSchema.parse({
-          recordId: `rep_${crypto.randomUUID().slice(0, 8)}`,
-          dataProvenance: parsed.dataProvenance ?? this.defaultMutationProvenance("risk"),
-          partnerId: parsed.entityId,
-          delta: parsed.severity === "critical" ? -8 : parsed.severity === "high" ? -5 : -2,
-          reasonType:
-            parsed.reasonType === "policy_violation" ? "manual_adjustment" : parsed.reasonType,
-          evidenceRefs: [riskCase.caseId],
-          disputeStatus: "none",
-          occurredAt: nowIso(),
-        }),
+      const reputationRecord = ReputationRecordSchema.parse({
+        recordId: `rep_${crypto.randomUUID().slice(0, 8)}`,
+        dataProvenance: parsed.dataProvenance ?? this.defaultMutationProvenance("risk"),
+        partnerId: parsed.entityId,
+        delta: parsed.severity === "critical" ? -8 : parsed.severity === "high" ? -5 : -2,
+        reasonType:
+          parsed.reasonType === "policy_violation" ? "manual_adjustment" : parsed.reasonType,
+        evidenceRefs: [riskCase.caseId],
+        disputeStatus: "none",
+        occurredAt: nowIso(),
+      });
+      await this.upsertReputationRecord(reputationRecord);
+      const freezeAmount = RISK_FREEZE_AMOUNT_BY_SEVERITY[parsed.severity];
+      await this.freezePartnerReserve(
+        parsed.entityId,
+        freezeAmount,
+        reputationRecord.recordId,
+        parsed.reasonType,
       );
     }
     return riskCase;
@@ -2752,6 +3815,24 @@ export class PromotionAgentStore {
     if (target) {
       target.disputeStatus = status === "approved" ? "resolved" : "overturned";
       await this.repository.updateReputationRecord(target);
+      const reserveEntries = await this.repository.listPartnerReserveLedgerEntries(target.partnerId);
+      const frozenAmount = reserveEntries
+        .filter((entry) => entry.sourceRef === target.recordId && entry.entryType === "freeze")
+        .reduce((total, entry) => total + entry.amount, 0);
+      const slashedAmount = reserveEntries
+        .filter((entry) => entry.sourceRef === target.recordId && entry.entryType === "slash")
+        .reduce((total, entry) => total + entry.amount, 0);
+
+      if (status === "approved") {
+        if (frozenAmount > 0) {
+          await this.releasePartnerReserve(target.partnerId, frozenAmount, target.recordId, "appeal_approved");
+        }
+        if (slashedAmount > 0) {
+          await this.restorePartnerReserve(target.partnerId, slashedAmount, target.recordId, "appeal_approved");
+        }
+      } else if (frozenAmount > 0) {
+        await this.slashPartnerReserve(target.partnerId, frozenAmount, target.recordId, "appeal_rejected");
+      }
     }
     return appeal;
   }
@@ -2829,6 +3910,7 @@ export class PromotionAgentStore {
 
   async createCampaign(input: CampaignDraftInput) {
     const parsed = CampaignDraftInputSchema.parse(input);
+    this.assertCampaignUsesRealData(parsed);
     const workspaceId = parsed.workspaceId ?? this.currentWorkspaceId();
     const { subscription } = await this.ensureWorkspaceBillingState(workspaceId);
     const fallbackDetailUrl = parsed.sourceDocumentUrl ?? parsed.product.actionEndpoints[0] ?? parsed.proofReferences[0]?.url;
@@ -2853,6 +3935,9 @@ export class PromotionAgentStore {
       disclosureText: parsed.disclosureText,
       policyPass: false,
       minTrust: parsed.minTrust,
+      opcProfileId: parsed.opcProfileId ?? null,
+      opcReviewDecision: null,
+      scaleEligibility: "full",
       linkBundle: parsed.linkBundle ?? {
         homepageUrl: fallbackDetailUrl,
         productDetailUrl: fallbackDetailUrl,
@@ -2905,6 +3990,7 @@ export class PromotionAgentStore {
     await this.repository.upsertCampaign(campaign);
 
     const policyCheck = PolicyCheckResultSchema.parse(runPolicyCheck(campaign));
+    const opcGate = await this.evaluateCampaignOpcGate(campaign.opcProfileId);
     await this.repository.insertPolicyCheck(policyCheck);
     await this.recordAuditEvent(
       createAuditEvent({
@@ -2924,12 +4010,21 @@ export class PromotionAgentStore {
           decision: policyCheck.decision,
           riskFlags: policyCheck.riskFlags,
           reasons: policyCheck.reasons,
+          opcReviewDecision: opcGate.reviewDecision,
+          scaleEligibility: opcGate.scaleEligibility,
+          opcReason: opcGate.reason,
         },
       }),
     );
 
+    campaign.opcReviewDecision = opcGate.reviewDecision;
+    campaign.scaleEligibility = opcGate.scaleEligibility;
+
     if (policyCheck.decision === "fail") {
       campaign.policyPass = false;
+      campaign.status = "rejected";
+    } else if (opcGate.reviewDecision === "rejected") {
+      campaign.policyPass = policyCheck.decision === "pass";
       campaign.status = "rejected";
     } else {
       campaign.policyPass = policyCheck.decision === "pass";
@@ -2954,6 +4049,8 @@ export class PromotionAgentStore {
           status: campaign.status,
           policyPass: campaign.policyPass,
           decision: policyCheck.decision,
+          opcReviewDecision: campaign.opcReviewDecision,
+          scaleEligibility: campaign.scaleEligibility,
         },
       }),
     );
@@ -2973,6 +4070,10 @@ export class PromotionAgentStore {
       return null;
     }
 
+    const opcGate = await this.evaluateCampaignOpcGate(campaign.opcProfileId);
+    campaign.opcReviewDecision = opcGate.reviewDecision;
+    campaign.scaleEligibility = opcGate.scaleEligibility;
+
     if (policyCheck.decision !== "pass") {
       campaign.status = policyCheck.decision === "fail" ? "rejected" : "reviewing";
       campaign.policyPass = false;
@@ -2989,6 +4090,8 @@ export class PromotionAgentStore {
           details: {
             decision: policyCheck.decision,
             status: campaign.status,
+            opcReviewDecision: campaign.opcReviewDecision,
+            scaleEligibility: campaign.scaleEligibility,
           },
         }),
       );
@@ -2996,6 +4099,37 @@ export class PromotionAgentStore {
         activated: false,
         campaign,
         policyCheck,
+        opcGate,
+      };
+    }
+
+    if (!opcGate.activationAllowed) {
+      campaign.status = opcGate.reviewDecision === "rejected" ? "rejected" : "reviewing";
+      campaign.policyPass = true;
+      await this.repository.upsertCampaign(campaign);
+      await this.recordAuditEvent(
+        createAuditEvent({
+          traceId: campaignId,
+          entityType: "campaign",
+          entityId: campaignId,
+          action: "activate_campaign",
+          status: opcGate.reviewDecision === "rejected" ? "failure" : "blocked",
+          actorType: "api",
+          actorId: "campaigns.activate",
+          details: {
+            decision: policyCheck.decision,
+            status: campaign.status,
+            opcReviewDecision: campaign.opcReviewDecision,
+            scaleEligibility: campaign.scaleEligibility,
+            opcReason: opcGate.reason,
+          },
+        }),
+      );
+      return {
+        activated: false,
+        campaign,
+        policyCheck,
+        opcGate,
       };
     }
 
@@ -3013,6 +4147,8 @@ export class PromotionAgentStore {
         actorId: "campaigns.activate",
         details: {
           status: campaign.status,
+          opcReviewDecision: campaign.opcReviewDecision,
+          scaleEligibility: campaign.scaleEligibility,
         },
       }),
     );
@@ -3021,6 +4157,7 @@ export class PromotionAgentStore {
       activated: true,
       campaign,
       policyCheck,
+      opcGate,
     };
   }
 
@@ -3049,7 +4186,7 @@ export class PromotionAgentStore {
 
     const [campaigns, partners] = await Promise.all([
       this.repository.listCampaigns(),
-      this.repository.listPartners(),
+      this.listGovernedPartners(),
     ]);
     let filteredPartners = partners;
 
@@ -3097,9 +4234,10 @@ export class PromotionAgentStore {
     const shortlisted = shortlistCampaigns(request, campaigns, filteredPartners);
     const totalCandidates = campaigns.length * filteredPartners.filter((partner) => partner.status === "active").length;
 
+    const activeFilteredPartners = filteredPartners.filter((partner) => partner.status === "active");
     const response = {
       intentId: request.intentId,
-      totalCandidates,
+      totalCandidates: campaigns.length * activeFilteredPartners.length,
       eligibleCandidates: eligibleBids.length,
       shortlisted,
     };
@@ -3537,6 +4675,24 @@ export class PromotionAgentStore {
     settlement.updatedAt = nowIso();
     await this.repository.updateSettlement(settlement);
 
+    const disputeReputationRecord = ReputationRecordSchema.parse({
+      recordId: `rep_settlement_dispute_${settlementId}`,
+      dataProvenance: settlement.dataProvenance,
+      partnerId: settlement.partnerId,
+      delta: -3,
+      reasonType: "manual_adjustment",
+      evidenceRefs: [settlement.settlementId],
+      disputeStatus: "none",
+      occurredAt: nowIso(),
+    });
+    await this.upsertReputationRecord(disputeReputationRecord);
+    await this.freezePartnerReserve(
+      settlement.partnerId,
+      SETTLEMENT_DISPUTE_FREEZE_AMOUNT,
+      disputeReputationRecord.recordId,
+      "settlement_dispute",
+    );
+
     const retryJob = await this.repository.getSettlementRetryJobBySettlementId(settlementId);
     if (retryJob && retryJob.status !== "completed" && retryJob.status !== "failed") {
       retryJob.status = "cancelled";
@@ -3556,6 +4712,8 @@ export class PromotionAgentStore {
         actorId: "settlements.dispute",
         details: {
           settlementId,
+          partnerId: settlement.partnerId,
+          reputationRecordId: disputeReputationRecord.recordId,
         },
       }),
     );

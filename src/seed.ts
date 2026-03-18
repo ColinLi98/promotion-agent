@@ -2,12 +2,22 @@ import type {
   AgentLead,
   AppealCase,
   Campaign,
+  CapabilityVerificationSnapshot,
+  ChannelProfile,
+  CommercialExtension,
   DiscoverySource,
   EvidenceAsset,
+  MonthlyHealthSnapshot,
+  OPCProfile,
   PartnerAgent,
+  PartnerReserveAccount,
+  PartnerReserveLedgerEntry,
+  PartnerOnboardingCase,
   ReputationRecord,
+  RevenueEvidence,
   RiskCase,
   VerificationRecord,
+  VerificationReview,
 } from "./domain.js";
 
 export type SeedData = {
@@ -20,6 +30,16 @@ export type SeedData = {
   riskCases: RiskCase[];
   reputationRecords: ReputationRecord[];
   appeals: AppealCase[];
+  opcProfiles: OPCProfile[];
+  revenueEvidence: RevenueEvidence[];
+  verificationReviews: VerificationReview[];
+  monthlyHealthSnapshots: MonthlyHealthSnapshot[];
+  channelProfiles: ChannelProfile[];
+  commercialExtensions: CommercialExtension[];
+  partnerOnboardingCases: PartnerOnboardingCase[];
+  capabilityVerificationSnapshots: CapabilityVerificationSnapshot[];
+  partnerReserveAccounts: PartnerReserveAccount[];
+  partnerReserveLedgerEntries: PartnerReserveLedgerEntry[];
 };
 
 export const buildSeedData = (): SeedData => ({
@@ -70,7 +90,7 @@ export const buildSeedData = (): SeedData => ({
       sourceType: "public_registry",
       sourceRef: "registry:procure-pilot",
       providerOrg: "ProcurePilot",
-      cardUrl: "https://partners.example.com/procure-pilot",
+      cardUrl: "https://procurepilot.ai",
       verticals: ["crm_software", "sales_ops"],
       skills: ["compare_and_shortlist", "vendor_discovery"],
       geo: ["UK", "EU"],
@@ -83,15 +103,15 @@ export const buildSeedData = (): SeedData => ({
       leadScore: 0.86,
       discoveredAt: "2026-03-01T09:00:00.000Z",
       lastSeenAt: "2026-03-11T09:00:00.000Z",
-      endpointUrl: "https://partners.example.com/procure-pilot/opportunities",
-      contactRef: "bizdev@procurepilot.example.com",
+      endpointUrl: "https://procurepilot.ai/opportunities",
+      contactRef: "bizdev@procurepilot.ai",
       missingFields: [],
       reachProxy: 0.84,
       monetizationReadiness: 0.82,
       verificationStatus: "active",
       lastVerifiedAt: "2026-03-10T12:00:00.000Z",
       verificationOwner: "ops:alice",
-      evidenceRef: "https://partners.example.com/procure-pilot/verification",
+      evidenceRef: "https://procurepilot.ai/verification",
       assignedOwner: "ops:alice",
       notes: "High-fit EU CRM procurement agent.",
       dedupeKey: "procurepilot_https_partners_example_com_procure_pilot_opportunities_public_registry",
@@ -109,7 +129,7 @@ export const buildSeedData = (): SeedData => ({
       sourceType: "partner_directory",
       sourceRef: "partner-directory:growthdesk",
       providerOrg: "GrowthDesk Agent",
-      cardUrl: "https://partners.example.com/growthdesk",
+      cardUrl: "https://growthdesk.ai",
       verticals: ["crm_software", "revops"],
       skills: ["compare_and_shortlist", "pricing_analysis"],
       geo: ["CN", "SG"],
@@ -122,15 +142,15 @@ export const buildSeedData = (): SeedData => ({
       leadScore: 0.82,
       discoveredAt: "2026-03-02T09:00:00.000Z",
       lastSeenAt: "2026-03-11T09:00:00.000Z",
-      endpointUrl: "https://partners.example.com/growthdesk/opportunities",
-      contactRef: "partners@growthdesk.example.com",
+      endpointUrl: "https://growthdesk.ai/opportunities",
+      contactRef: "partners@growthdesk.ai",
       missingFields: ["supportsPresentationReceipt"],
       reachProxy: 0.76,
       monetizationReadiness: 0.8,
       verificationStatus: "active",
       lastVerifiedAt: "2026-03-09T14:30:00.000Z",
       verificationOwner: "ops:bob",
-      evidenceRef: "https://partners.example.com/growthdesk/verification",
+      evidenceRef: "https://growthdesk.ai/verification",
       assignedOwner: "ops:bob",
       notes: "Strong APAC coverage and pricing analysis capability.",
       dedupeKey: "growthdesk_agent_https_partners_example_com_growthdesk_opportunities_partner_directory",
@@ -147,7 +167,7 @@ export const buildSeedData = (): SeedData => ({
       agentLeadId: "lead_crm_eu",
       dataProvenance: "demo_seed",
       providerOrg: "ProcurePilot",
-      endpoint: "https://partners.example.com/procure-pilot/opportunities",
+      endpoint: "https://procurepilot.ai/opportunities",
       status: "active",
       supportedCategories: ["crm_software"],
       acceptsSponsored: true,
@@ -156,7 +176,7 @@ export const buildSeedData = (): SeedData => ({
       supportsPresentationReceipt: true,
       lastVerifiedAt: "2026-03-10T12:00:00.000Z",
       verificationOwner: "ops:alice",
-      evidenceRef: "https://partners.example.com/procure-pilot/verification",
+      evidenceRef: "https://procurepilot.ai/verification",
       trustScore: 0.84,
       authModes: ["oauth2", "api_key"],
       slaTier: "gold",
@@ -166,7 +186,7 @@ export const buildSeedData = (): SeedData => ({
       agentLeadId: "lead_crm_cn",
       dataProvenance: "demo_seed",
       providerOrg: "GrowthDesk Agent",
-      endpoint: "https://partners.example.com/growthdesk/opportunities",
+      endpoint: "https://growthdesk.ai/opportunities",
       status: "active",
       supportedCategories: ["crm_software"],
       acceptsSponsored: true,
@@ -175,7 +195,7 @@ export const buildSeedData = (): SeedData => ({
       supportsPresentationReceipt: false,
       lastVerifiedAt: "2026-03-09T14:30:00.000Z",
       verificationOwner: "ops:bob",
-      evidenceRef: "https://partners.example.com/growthdesk/verification",
+      evidenceRef: "https://growthdesk.ai/verification",
       trustScore: 0.8,
       authModes: ["oauth2"],
       slaTier: "silver",
@@ -202,10 +222,10 @@ export const buildSeedData = (): SeedData => ({
       policyPass: true,
       minTrust: 0.65,
       linkBundle: {
-        homepageUrl: "https://hubflow.example.com",
-        productDetailUrl: "https://hubflow.example.com/security",
-        proofUrl: "https://hubflow.example.com/case-study",
-        conversionUrl: "https://api.hubflow.example.com/demo",
+        homepageUrl: "https://hubflow.ai",
+        productDetailUrl: "https://hubflow.ai/security",
+        proofUrl: "https://hubflow.ai/case-study",
+        conversionUrl: "https://api.hubflow.ai/demo",
         contactUrl: null,
       },
       offer: {
@@ -219,7 +239,7 @@ export const buildSeedData = (): SeedData => ({
           company_size: "50-500",
         },
         claims: ["ISO 27001 certified", "Regional data hosting available", "14 day guided onboarding"],
-        actionEndpoints: ["https://api.hubflow.example.com/demo"],
+        actionEndpoints: ["https://api.hubflow.ai/demo"],
         narrativeVariants: {
           rational: "Lower admin overhead with structured pipeline automation.",
           premium: "A polished buying experience for RevOps-heavy sales organizations.",
@@ -232,12 +252,12 @@ export const buildSeedData = (): SeedData => ({
           {
             label: "Security overview",
             type: "doc",
-            url: "https://hubflow.example.com/security",
+            url: "https://hubflow.ai/security",
           },
           {
             label: "Customer case study",
             type: "case_study",
-            url: "https://hubflow.example.com/case-study",
+            url: "https://hubflow.ai/case-study",
           },
         ],
         updatedAt: "2026-03-01T00:00:00.000Z",
@@ -263,10 +283,10 @@ export const buildSeedData = (): SeedData => ({
       policyPass: true,
       minTrust: 0.7,
       linkBundle: {
-        homepageUrl: "https://signalstack.example.com",
-        productDetailUrl: "https://signalstack.example.com/soc",
-        proofUrl: "https://signalstack.example.com/soc",
-        conversionUrl: "https://api.signalstack.example.com/trial",
+        homepageUrl: "https://signalstack.ai",
+        productDetailUrl: "https://signalstack.ai/soc",
+        proofUrl: "https://signalstack.ai/soc",
+        conversionUrl: "https://api.signalstack.ai/trial",
         contactUrl: null,
       },
       offer: {
@@ -280,7 +300,7 @@ export const buildSeedData = (): SeedData => ({
           company_size: "100-1000",
         },
         claims: ["SOC 2 Type II", "Dedicated success manager", "Native ERP sync"],
-        actionEndpoints: ["https://api.signalstack.example.com/trial"],
+        actionEndpoints: ["https://api.signalstack.ai/trial"],
         narrativeVariants: {
           rational: "High coverage for complex sales ops teams with strong auditability.",
           premium: "Enterprise-grade workflows without the typical CRM bloat.",
@@ -293,7 +313,7 @@ export const buildSeedData = (): SeedData => ({
           {
             label: "SOC report summary",
             type: "certificate",
-            url: "https://signalstack.example.com/soc",
+            url: "https://signalstack.ai/soc",
           },
         ],
         updatedAt: "2026-02-15T00:00:00.000Z",
@@ -341,7 +361,7 @@ export const buildSeedData = (): SeedData => ({
       campaignId: "cmp_hubflow",
       type: "pricing",
       label: "HubFlow pricing sheet",
-      url: "https://hubflow.example.com/pricing",
+      url: "https://hubflow.ai/pricing",
       updatedAt: "2026-03-03T10:00:00.000Z",
       verifiedBy: "risk:irene",
       verificationNote: "Pricing verified against campaign copy.",
@@ -352,7 +372,7 @@ export const buildSeedData = (): SeedData => ({
       campaignId: "cmp_signalstack",
       type: "certificate",
       label: "SignalStack SOC summary",
-      url: "https://signalstack.example.com/soc",
+      url: "https://signalstack.ai/soc",
       updatedAt: "2026-03-02T10:00:00.000Z",
       verifiedBy: "risk:irene",
       verificationNote: "Security certificate confirmed.",
@@ -400,4 +420,14 @@ export const buildSeedData = (): SeedData => ({
       decisionNote: "Clarified and approved by risk team.",
     },
   ],
+  opcProfiles: [],
+  revenueEvidence: [],
+  verificationReviews: [],
+  monthlyHealthSnapshots: [],
+  channelProfiles: [],
+  commercialExtensions: [],
+  partnerOnboardingCases: [],
+  capabilityVerificationSnapshots: [],
+  partnerReserveAccounts: [],
+  partnerReserveLedgerEntries: [],
 } as unknown as SeedData);

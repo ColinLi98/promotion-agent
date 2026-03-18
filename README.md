@@ -374,7 +374,7 @@ export OUTREACH_SMTP_USER=songyili2026@163.com
 export OUTREACH_SMTP_PASS=<163_client_authorization_code>
 export OUTREACH_SMTP_FROM="Lumio Partnerships <songyili2026@163.com>"
 export OUTREACH_SMTP_REPLY_TO=songyili2026@163.com
-export OUTREACH_TRACKING_BASE_URL=https://your-public-promotion-agent-domain
+export OUTREACH_TRACKING_BASE_URL=https://promo.lumio.ai
 ```
 
 Notes:

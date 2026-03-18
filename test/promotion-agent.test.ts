@@ -67,6 +67,66 @@ const buildCanonicalReceiptPayload = ({
   };
 };
 
+const buildCampaignDraftPayload = (
+  overrides: Partial<{
+    workspaceId: string;
+    advertiser: string;
+    category: string;
+    regions: string[];
+    billingModel: "CPQR" | "CPA";
+    payoutAmount: number;
+    currency: string;
+    budget: number;
+    disclosureText: string;
+    minTrust: number;
+    opcProfileId: string | null;
+    product: {
+      name: string;
+      description: string;
+      price: number;
+      currency: string;
+      intendedFor: string[];
+      constraints: Record<string, unknown>;
+      claims: string[];
+      actionEndpoints: string[];
+      positioningBullets: string[];
+    };
+    proofReferences: Array<{ label: string; type: "doc" | "faq" | "case_study" | "certificate" | "screenshot"; url: string }>;
+  }> = {},
+) => ({
+  advertiser: "PipelineOS",
+  category: "crm_software",
+  regions: ["UK"],
+  billingModel: "CPQR" as const,
+  payoutAmount: 180,
+  currency: "USD",
+  budget: 9000,
+  disclosureText: "Sponsored recommendation from PipelineOS.",
+  minTrust: 0.66,
+  opcProfileId: null,
+  product: {
+    name: "PipelineOS CRM",
+    description: "CRM designed for mid-market revenue teams that need clear forecasting and handoff workflows.",
+    price: 599,
+    currency: "USD",
+    intendedFor: ["compare_and_shortlist", "vendor_discovery"],
+    constraints: {
+      company_size: "50-300",
+    },
+    claims: ["SOC 2 Type II", "Guided onboarding included"],
+    actionEndpoints: ["https://api.pipelineos.io/demo-request"],
+    positioningBullets: ["forecast accuracy", "handoff workflows"],
+  },
+  proofReferences: [
+    {
+      label: "Security overview",
+      type: "doc" as const,
+      url: "https://pipelineos.io/security",
+    },
+  ],
+  ...overrides,
+});
+
 describe("promotion-agent MVP flow", () => {
   it("creates a draft campaign, passes policy, activates it, and exposes it to opportunity exchange", async () => {
     const app = buildServer(createStore());
@@ -74,37 +134,7 @@ describe("promotion-agent MVP flow", () => {
     const creation = await app.inject({
       method: "POST",
       url: "/campaigns",
-      payload: {
-        advertiser: "PipelineOS",
-        category: "crm_software",
-        regions: ["UK"],
-        billingModel: "CPQR",
-        payoutAmount: 180,
-        currency: "USD",
-        budget: 9000,
-        disclosureText: "Sponsored recommendation from PipelineOS.",
-        minTrust: 0.66,
-        product: {
-          name: "PipelineOS CRM",
-          description: "CRM designed for mid-market revenue teams that need clear forecasting and handoff workflows.",
-          price: 599,
-          currency: "USD",
-          intendedFor: ["compare_and_shortlist", "vendor_discovery"],
-          constraints: {
-            company_size: "50-300",
-          },
-          claims: ["SOC 2 Type II", "Guided onboarding included"],
-          actionEndpoints: ["https://api.pipelineos.example.com/demo"],
-          positioningBullets: ["forecast accuracy", "handoff workflows"],
-        },
-        proofReferences: [
-          {
-            label: "Security overview",
-            type: "doc",
-            url: "https://pipelineos.example.com/security",
-          },
-        ],
-      },
+      payload: buildCampaignDraftPayload(),
     });
 
     expect(creation.statusCode).toBe(201);
@@ -170,14 +200,14 @@ describe("promotion-agent MVP flow", () => {
           intendedFor: ["compare_and_shortlist"],
           constraints: {},
           claims: ["100% guaranteed ROI in 7 days"],
-          actionEndpoints: ["https://api.riskycrm.example.com/signup"],
+          actionEndpoints: ["https://api.riskycrm.io/signup"],
           positioningBullets: ["guaranteed growth"],
         },
         proofReferences: [
           {
             label: "Marketing brochure",
             type: "doc",
-            url: "https://riskycrm.example.com/brochure",
+            url: "https://riskycrm.io/brochure",
           },
         ],
       },
@@ -194,6 +224,251 @@ describe("promotion-agent MVP flow", () => {
     expect(activation.statusCode).toBe(409);
     expect(activation.json().activated).toBe(false);
     expect(activation.json().policyCheck.riskFlags).toContain("high_risk_claim_language");
+
+    await app.close();
+  });
+
+  it("rejects placeholder campaign URLs instead of accepting fake defaults", async () => {
+    const app = buildServer(createStore());
+
+    const creation = await app.inject({
+      method: "POST",
+      url: "/campaigns",
+      payload: buildCampaignDraftPayload({
+        advertiser: "PipelineOS",
+        product: {
+          ...buildCampaignDraftPayload().product,
+          actionEndpoints: ["https://api.pipelineos.example.com/demo"],
+        },
+      }),
+    });
+
+    expect(creation.statusCode).toBe(400);
+    expect(creation.json().message).toContain("real URL");
+
+    await app.close();
+  });
+
+  it("blocks campaign activation when opc review is missing, then rejects after opc rejection", async () => {
+    const app = buildServer(createStore());
+
+    const opcProfile = await app.inject({
+      method: "POST",
+      url: "/opc/profiles",
+      payload: {
+        legalEntityName: "Revenue Core Ltd",
+        registrationId: "UK-77889900",
+        operatorType: "company",
+        primaryBusinessType: "product",
+        businessModelPrimary: "saas",
+        websiteUrl: "https://revenuecore.io",
+        productPageUrl: "https://revenuecore.io/product",
+        coursePageUrl: null,
+        entityVerificationStatus: "passed",
+        onboardingChannel: "inbound",
+      },
+    });
+    expect(opcProfile.statusCode).toBe(201);
+    const opcId = opcProfile.json().opcId;
+
+    const creation = await app.inject({
+      method: "POST",
+      url: "/campaigns",
+      payload: buildCampaignDraftPayload({
+        advertiser: "RevenueCore",
+        opcProfileId: opcId,
+      }),
+    });
+    expect(creation.statusCode).toBe(201);
+    expect(creation.json().policyCheck.decision).toBe("pass");
+
+    const blockedActivation = await app.inject({
+      method: "POST",
+      url: `/campaigns/${creation.json().campaign.campaignId}/activate`,
+    });
+    expect(blockedActivation.statusCode).toBe(409);
+    expect(blockedActivation.json().activated).toBe(false);
+    expect(blockedActivation.json().opcGate.reviewDecision).toBe("manual_review");
+    expect(blockedActivation.json().campaign.scaleEligibility).toBe("blocked");
+
+    const rejectedReview = await app.inject({
+      method: "POST",
+      url: "/opc/reviews",
+      payload: {
+        opcId,
+        verificationScore: 41,
+        guruRiskScore: 77,
+        externalCustomerRevenueRatio: 0.42,
+        knowledgeRevenueRatio: 0.48,
+        proofBundleStatus: "partial",
+        customerSampleStatus: "failed",
+        pageClassification: "course-led",
+        decision: "rejected",
+        reviewerOwner: "risk:irene",
+        validUntil: "2026-04-30",
+        decisionReason: "Revenue mix is course-led and proof is insufficient.",
+      },
+    });
+    expect(rejectedReview.statusCode).toBe(201);
+
+    const rejectedActivation = await app.inject({
+      method: "POST",
+      url: `/campaigns/${creation.json().campaign.campaignId}/activate`,
+    });
+    expect(rejectedActivation.statusCode).toBe(409);
+    expect(rejectedActivation.json().activated).toBe(false);
+    expect(rejectedActivation.json().opcGate.reviewDecision).toBe("rejected");
+    expect(rejectedActivation.json().campaign.status).toBe("rejected");
+
+    await app.close();
+  });
+
+  it("allows approved and probation opc campaigns, while limiting probation scale", async () => {
+    const app = buildServer(
+      createStore({
+        appMode: "demo",
+        seedData: buildDemoSeedData(),
+      }),
+    );
+
+    const scorecards = await app.inject({
+      method: "GET",
+      url: "/buyer-agents/scorecards?isCommerciallyEligible=true",
+    });
+    expect(scorecards.statusCode).toBe(200);
+    expect(scorecards.json().length).toBeGreaterThan(2);
+
+    const approvedProfile = await app.inject({
+      method: "POST",
+      url: "/opc/profiles",
+      payload: {
+        legalEntityName: "Approved Systems Ltd",
+        registrationId: "UK-11223344",
+        operatorType: "company",
+        primaryBusinessType: "product",
+        businessModelPrimary: "saas",
+        websiteUrl: "https://approvedsystems.io",
+        productPageUrl: "https://approvedsystems.io/product",
+        coursePageUrl: null,
+        entityVerificationStatus: "passed",
+        onboardingChannel: "bd",
+      },
+    });
+    expect(approvedProfile.statusCode).toBe(201);
+    const approvedOpcId = approvedProfile.json().opcId;
+
+    const approvedReview = await app.inject({
+      method: "POST",
+      url: "/opc/reviews",
+      payload: {
+        opcId: approvedOpcId,
+        verificationScore: 92,
+        guruRiskScore: 8,
+        externalCustomerRevenueRatio: 0.95,
+        knowledgeRevenueRatio: 0.03,
+        proofBundleStatus: "complete",
+        customerSampleStatus: "passed",
+        pageClassification: "product-led",
+        decision: "approved",
+        reviewerOwner: "risk:irene",
+        validUntil: "2026-07-31",
+        decisionReason: "Verified product-led operator with clean revenue mix.",
+      },
+    });
+    expect(approvedReview.statusCode).toBe(201);
+
+    const approvedCampaign = await app.inject({
+      method: "POST",
+      url: "/campaigns",
+      payload: buildCampaignDraftPayload({
+        workspaceId: "workspace_demo",
+        advertiser: "ApprovedOps",
+        opcProfileId: approvedOpcId,
+      }),
+    });
+    expect(approvedCampaign.statusCode).toBe(201);
+
+    const approvedActivation = await app.inject({
+      method: "POST",
+      url: `/campaigns/${approvedCampaign.json().campaign.campaignId}/activate`,
+    });
+    expect(approvedActivation.statusCode).toBe(200);
+    expect(approvedActivation.json().opcGate.reviewDecision).toBe("approved");
+    expect(approvedActivation.json().campaign.scaleEligibility).toBe("full");
+
+    const probationProfile = await app.inject({
+      method: "POST",
+      url: "/opc/profiles",
+      payload: {
+        legalEntityName: "Probation Systems Ltd",
+        registrationId: "UK-55664433",
+        operatorType: "company",
+        primaryBusinessType: "mixed",
+        businessModelPrimary: "saas_plus_training",
+        websiteUrl: "https://probationops.io",
+        productPageUrl: "https://probationops.io/product",
+        coursePageUrl: "https://probationops.io/training",
+        entityVerificationStatus: "passed",
+        onboardingChannel: "bd",
+      },
+    });
+    expect(probationProfile.statusCode).toBe(201);
+    const probationOpcId = probationProfile.json().opcId;
+
+    const probationReview = await app.inject({
+      method: "POST",
+      url: "/opc/reviews",
+      payload: {
+        opcId: probationOpcId,
+        verificationScore: 73,
+        guruRiskScore: 36,
+        externalCustomerRevenueRatio: 0.71,
+        knowledgeRevenueRatio: 0.24,
+        proofBundleStatus: "complete",
+        customerSampleStatus: "passed",
+        pageClassification: "mixed",
+        decision: "probation",
+        reviewerOwner: "risk:irene",
+        validUntil: "2026-05-31",
+        decisionReason: "Allow small-scale testing only while revenue mix is monitored.",
+      },
+    });
+    expect(probationReview.statusCode).toBe(201);
+
+    const probationCampaign = await app.inject({
+      method: "POST",
+      url: "/campaigns",
+      payload: buildCampaignDraftPayload({
+        workspaceId: "workspace_demo",
+        advertiser: "ProbationOps",
+        opcProfileId: probationOpcId,
+      }),
+    });
+    expect(probationCampaign.statusCode).toBe(201);
+
+    const probationActivation = await app.inject({
+      method: "POST",
+      url: `/campaigns/${probationCampaign.json().campaign.campaignId}/activate`,
+    });
+    expect(probationActivation.statusCode).toBe(200);
+    expect(probationActivation.json().opcGate.reviewDecision).toBe("probation");
+    expect(probationActivation.json().campaign.scaleEligibility).toBe("limited");
+
+    const probationRun = await app.inject({
+      method: "POST",
+      url: "/promotion-runs",
+      payload: {
+        workspaceId: "workspace_demo",
+        campaignId: probationCampaign.json().campaign.campaignId,
+        category: "crm_software",
+        taskType: "compare_and_shortlist",
+        geo: ["US"],
+      },
+    });
+    expect(probationRun.statusCode).toBe(201);
+    expect(probationRun.json().qualifiedBuyerAgentsCount).toBe(2);
+    expect(probationRun.json().constraints.scaleEligibility).toBe("limited");
+    expect(probationRun.json().constraints.opcReviewDecision).toBe("probation");
 
     await app.close();
   });
@@ -482,14 +757,14 @@ describe("promotion-agent MVP flow", () => {
           intendedFor: ["compare_and_shortlist"],
           constraints: {},
           claims: ["SOC 2 Type II"],
-          actionEndpoints: ["https://api.paginated.example.com/demo"],
+          actionEndpoints: ["https://api.paginatedcrm.io/demo-request"],
           positioningBullets: [],
         },
         proofReferences: [
           {
             label: "Security",
             type: "doc",
-            url: "https://paginated.example.com/security",
+            url: "https://paginatedcrm.io/security",
           },
         ],
       },
@@ -627,8 +902,8 @@ describe("promotion-agent MVP flow", () => {
           <body>
             <h1>NovaProcure Agent</h1>
             <p>CRM procurement agent with sponsored disclosure, oauth and api key support.</p>
-            <a href="https://nova.example.com/opportunities">Opportunities API</a>
-            <p>Contact: ops@nova.example.com</p>
+            <a href="${baseUrl}/opportunities">Opportunities API</a>
+            <p>Contact: alliances@novaprocure.io</p>
           </body>
         </html>
       `);
@@ -695,8 +970,8 @@ describe("promotion-agent MVP flow", () => {
           <body>
             <h1>Atlas Revenue Agent</h1>
             <p>CRM workflow agent with sponsored disclosure and oauth support.</p>
-            <a href="https://atlas.example.com/opportunities">Opportunities API</a>
-            <p>Contact: team@atlas.example.com</p>
+            <a href="${baseUrl}/opportunities">Opportunities API</a>
+            <p>Contact: team@atlasrevenue.ai</p>
           </body>
         </html>
       `);
@@ -986,6 +1261,698 @@ describe("promotion-agent MVP flow", () => {
     await app.close();
   });
 
+  it("creates opc verification canonical records through the API", async () => {
+    const app = buildServer(createStore());
+
+    const profile = await app.inject({
+      method: "POST",
+      url: "/opc/profiles",
+      payload: {
+        legalEntityName: "North Ridge Labs Ltd",
+        registrationId: "UK-55667788",
+        operatorType: "company",
+        primaryBusinessType: "product",
+        businessModelPrimary: "saas",
+        websiteUrl: "https://northridge.io",
+        productPageUrl: "https://northridge.io/product",
+        coursePageUrl: null,
+        entityVerificationStatus: "passed",
+        onboardingChannel: "bd_referral",
+      },
+    });
+    expect(profile.statusCode).toBe(201);
+
+    const opcId = profile.json().opcId;
+
+    const evidence = await app.inject({
+      method: "POST",
+      url: "/opc/evidence",
+      payload: {
+        opcId,
+        periodStart: "2026-01-01",
+        periodEnd: "2026-01-31",
+        payoutSource: "stripe",
+        settlementAmount: 42000,
+        bankInflowAmount: 39800,
+        orderCount: 34,
+        refundAmount: 800,
+        chargebackAmount: 120,
+        variableCostEstimate: 9500,
+        contributionProfitEstimate: 30300,
+        reconciliationStatus: "passed",
+        sourceRef: "proof://jan-ledger",
+      },
+    });
+    expect(evidence.statusCode).toBe(201);
+
+    const review = await app.inject({
+      method: "POST",
+      url: "/opc/reviews",
+      payload: {
+        opcId,
+        verificationScore: 87,
+        guruRiskScore: 14,
+        externalCustomerRevenueRatio: 0.91,
+        knowledgeRevenueRatio: 0.06,
+        proofBundleStatus: "complete",
+        customerSampleStatus: "passed",
+        pageClassification: "product-led",
+        decision: "approved",
+        reviewerOwner: "risk:irene",
+        validUntil: "2026-06-30",
+        decisionReason: "Core revenue is product-led and fully reconciled.",
+      },
+    });
+    expect(review.statusCode).toBe(201);
+
+    const snapshot = await app.inject({
+      method: "POST",
+      url: "/opc/health-snapshots",
+      payload: {
+        opcId,
+        month: "2026-02-01",
+        netCashIn: 36100,
+        contributionProfitEstimate: 27100,
+        refundRate: 0.03,
+        chargebackRate: 0.004,
+        externalCustomerRevenueRatio: 0.9,
+        knowledgeRevenueRatio: 0.08,
+        trafficConcentration: 0.42,
+        riskDelta: -0.08,
+        statusRecommendation: "keep",
+        escalationRequired: false,
+      },
+    });
+    expect(snapshot.statusCode).toBe(201);
+
+    const listedProfiles = await app.inject({
+      method: "GET",
+      url: "/opc/profiles?entityVerificationStatus=passed",
+    });
+    expect(listedProfiles.statusCode).toBe(200);
+    expect(listedProfiles.json().some((item: { opcId: string }) => item.opcId === opcId)).toBe(true);
+
+    const listedEvidence = await app.inject({
+      method: "GET",
+      url: `/opc/evidence?opcId=${encodeURIComponent(opcId)}`,
+    });
+    expect(listedEvidence.statusCode).toBe(200);
+    expect(listedEvidence.json()).toHaveLength(1);
+
+    const listedReviews = await app.inject({
+      method: "GET",
+      url: `/opc/reviews?opcId=${encodeURIComponent(opcId)}&decision=approved`,
+    });
+    expect(listedReviews.statusCode).toBe(200);
+    expect(listedReviews.json()[0].decision).toBe("approved");
+
+    const listedSnapshots = await app.inject({
+      method: "GET",
+      url: `/opc/health-snapshots?opcId=${encodeURIComponent(opcId)}`,
+    });
+    expect(listedSnapshots.statusCode).toBe(200);
+    expect(listedSnapshots.json()[0].statusRecommendation).toBe("keep");
+
+    await app.close();
+  });
+
+  it("creates channel, onboarding, extension, and capability verification canonical records", async () => {
+    const app = buildServer(createStore());
+
+    const channel = await app.inject({
+      method: "POST",
+      url: "/channel-profiles",
+      payload: {
+        channelType: "marketplace",
+        operatorName: "Agent Market One",
+        discoveryMethod: "import",
+        onboardingMode: "assisted",
+        expectedReachProxy: 0.76,
+        supportsReceipts: ["delivery", "presented", "acted"],
+        rateLimitPolicy: "100 req/min",
+        costModel: "revshare",
+        channelStatus: "active",
+      },
+    });
+    expect(channel.statusCode).toBe(201);
+    const channelId = channel.json().channelId;
+
+    const onboardingCase = await app.inject({
+      method: "POST",
+      url: "/partner-onboarding-cases",
+      payload: {
+        agentLeadId: "lead_crm_eu",
+        channelId,
+        currentStage: "sandbox",
+        contractStatus: "negotiating",
+        sandboxStatus: "ready",
+        pilotBudgetLimit: 2500,
+        technicalOwner: "tech:mina",
+        businessOwner: "bd:alex",
+        blockerCode: null,
+        nextReviewAt: "2026-03-25T09:00:00.000Z",
+        launchedAt: null,
+      },
+    });
+    expect(onboardingCase.statusCode).toBe(201);
+
+    const capabilitySnapshot = await app.inject({
+      method: "POST",
+      url: "/capability-verification-snapshots",
+      payload: {
+        agentLeadId: "lead_crm_eu",
+        publicCardValid: true,
+        authTestPassed: true,
+        opportunityTestPassed: true,
+        receiptTestPassed: true,
+        presentationReceiptSupported: true,
+        meanLatencyMs: 218,
+        successRate7d: 0.99,
+        riskTier: "low",
+        lastProbeAt: "2026-03-18T08:00:00.000Z",
+        recommendedTier: "scale",
+      },
+    });
+    expect(capabilitySnapshot.statusCode).toBe(201);
+
+    const extension = await app.inject({
+      method: "POST",
+      url: "/commercial-extensions",
+      payload: {
+        partnerId: "partner_procure_pilot",
+        extensionVersion: "2026-03-18",
+        acceptsCommercialOpportunity: true,
+        placementTypes: ["shortlist", "detail"],
+        disclosureRequired: true,
+        receiptModes: ["delivery", "presented", "viewed", "acted"],
+        billingModes: ["CPQR", "CPA"],
+        supportedIntentDomains: ["crm_software", "sales_ops"],
+        maxQps: 12,
+        policyEndpoint: "https://procurepilot.io/policy",
+        contractRequired: true,
+        signatureScheme: "jws",
+      },
+    });
+    expect(extension.statusCode).toBe(201);
+
+    const listedChannels = await app.inject({
+      method: "GET",
+      url: "/channel-profiles?channelType=marketplace&channelStatus=active",
+    });
+    expect(listedChannels.statusCode).toBe(200);
+    expect(listedChannels.json().some((item: { channelId: string }) => item.channelId === channelId)).toBe(true);
+
+    const listedCases = await app.inject({
+      method: "GET",
+      url: "/partner-onboarding-cases?agentLeadId=lead_crm_eu&currentStage=sandbox",
+    });
+    expect(listedCases.statusCode).toBe(200);
+    expect(listedCases.json()).toHaveLength(1);
+
+    const listedSnapshots = await app.inject({
+      method: "GET",
+      url: "/capability-verification-snapshots?agentLeadId=lead_crm_eu&recommendedTier=scale",
+    });
+    expect(listedSnapshots.statusCode).toBe(200);
+    expect(listedSnapshots.json()).toHaveLength(1);
+
+    const listedExtensions = await app.inject({
+      method: "GET",
+      url: "/commercial-extensions?partnerId=partner_procure_pilot",
+    });
+    expect(listedExtensions.statusCode).toBe(200);
+    expect(listedExtensions.json()[0].contractRequired).toBe(true);
+
+    await app.close();
+  });
+
+  it("auto-syncs onboarding cases and capability snapshots from recruitment readiness", async () => {
+    const app = buildServer(
+      createStore({
+        appMode: "demo",
+        seedData: buildDemoSeedData(),
+      }),
+    );
+
+    const pipelines = await app.inject({
+      method: "GET",
+      url: "/recruitment/pipelines",
+    });
+    expect(pipelines.statusCode).toBe(200);
+    const lighthousePipeline = pipelines.json().find((item: { leadId: string }) => item.leadId === "lead_demo_lighthouse");
+    expect(lighthousePipeline).toBeTruthy();
+
+    const onboardingCasesBefore = await app.inject({
+      method: "GET",
+      url: "/partner-onboarding-cases?agentLeadId=lead_demo_lighthouse",
+    });
+    expect(onboardingCasesBefore.statusCode).toBe(200);
+    expect(onboardingCasesBefore.json()).toHaveLength(1);
+    expect(onboardingCasesBefore.json()[0].currentStage).toBe("sandbox");
+    expect(onboardingCasesBefore.json()[0].sandboxStatus).toBe("ready");
+
+    const capabilityBefore = await app.inject({
+      method: "GET",
+      url: "/capability-verification-snapshots?agentLeadId=lead_demo_lighthouse",
+    });
+    expect(capabilityBefore.statusCode).toBe(200);
+    expect(capabilityBefore.json()).toHaveLength(1);
+    expect(capabilityBefore.json()[0].publicCardValid).toBe(true);
+    expect(capabilityBefore.json()[0].recommendedTier).toBe("pilot");
+
+    const onboardingTasks = await app.inject({
+      method: "GET",
+      url: `/recruitment/pipelines/${lighthousePipeline.pipelineId}/onboarding-tasks`,
+    });
+    expect(onboardingTasks.statusCode).toBe(200);
+    const slaTask = onboardingTasks.json().find((item: { taskType: string }) => item.taskType === "sla_review");
+    expect(slaTask).toBeTruthy();
+
+    const completeSla = await app.inject({
+      method: "POST",
+      url: `/onboarding-tasks/${slaTask.taskId}/status`,
+      payload: {
+        status: "done",
+        notes: "SLA review completed for pilot access.",
+      },
+    });
+    expect(completeSla.statusCode).toBe(200);
+
+    const onboardingCasesAfter = await app.inject({
+      method: "GET",
+      url: "/partner-onboarding-cases?agentLeadId=lead_demo_lighthouse",
+    });
+    expect(onboardingCasesAfter.statusCode).toBe(200);
+    expect(onboardingCasesAfter.json()[0].currentStage).toBe("pilot");
+    expect(onboardingCasesAfter.json()[0].contractStatus).toBe("signed");
+
+    const partners = await app.inject({
+      method: "GET",
+      url: "/partners?provenance=demo_seed,demo_bootstrap",
+    });
+    expect(partners.statusCode).toBe(200);
+    expect(partners.json().some((item: { agentLeadId: string }) => item.agentLeadId === "lead_demo_lighthouse")).toBe(true);
+
+    await app.close();
+  });
+
+  it("applies reputation penalties to partner trust, scorecard eligibility, and shortlist outcomes", async () => {
+    const app = buildServer(createStore());
+
+    const initialPartners = await app.inject({
+      method: "GET",
+      url: "/partners",
+    });
+    expect(initialPartners.statusCode).toBe(200);
+    const initialPartner = initialPartners.json().find((item: { partnerId: string }) => item.partnerId === "partner_procure_pilot");
+    expect(initialPartner).toBeTruthy();
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const riskCase = await app.inject({
+        method: "POST",
+        url: "/risk/cases",
+        payload: {
+          entityType: "partner",
+          entityId: "partner_procure_pilot",
+          reasonType: "claim_mismatch",
+          severity: "critical",
+          ownerId: "risk:test",
+          note: `Critical trust penalty ${attempt + 1}`,
+        },
+      });
+      expect(riskCase.statusCode).toBe(201);
+    }
+
+    const penalizedPartners = await app.inject({
+      method: "GET",
+      url: "/partners",
+    });
+    expect(penalizedPartners.statusCode).toBe(200);
+    const penalizedPartner = penalizedPartners.json().find((item: { partnerId: string }) => item.partnerId === "partner_procure_pilot");
+    expect(penalizedPartner.trustScore).toBeLessThan(initialPartner.trustScore);
+    expect(penalizedPartner.trustScore).toBeLessThan(0.65);
+
+    const scorecards = await app.inject({
+      method: "GET",
+      url: "/buyer-agents/scorecards",
+    });
+    expect(scorecards.statusCode).toBe(200);
+    const procurePilotScorecard = scorecards.json().find((item: { partnerId: string | null }) => item.partnerId === "partner_procure_pilot");
+    expect(procurePilotScorecard).toBeTruthy();
+    expect(procurePilotScorecard.isCommerciallyEligible).toBe(false);
+
+    const evaluation = await app.inject({
+      method: "POST",
+      url: "/opportunities/evaluate",
+      payload: {
+        intentId: "int_trust_penalty_01",
+        category: "crm_software",
+        taskType: "compare_and_shortlist",
+        constraints: {
+          geo: ["UK"],
+        },
+        placement: "shortlist",
+        relevanceFloor: 0.72,
+        utilityFloor: 0.68,
+        sponsoredSlots: 5,
+        disclosureRequired: true,
+      },
+    });
+    expect(evaluation.statusCode).toBe(200);
+    expect(evaluation.json().shortlisted).toHaveLength(0);
+
+    await app.close();
+  });
+
+  it("restores effective partner trust after an approved appeal and blocks dispatch when trust drops mid-run", async () => {
+    const app = buildServer(createStore());
+
+    const run = await app.inject({
+      method: "POST",
+      url: "/promotion-runs",
+      payload: {
+        workspaceId: "workspace_default",
+        campaignId: "cmp_hubflow",
+        category: "crm_software",
+        taskType: "compare_and_shortlist",
+        geo: ["UK"],
+      },
+    });
+    expect(run.statusCode).toBe(201);
+    expect(run.json().qualifiedBuyerAgentsCount).toBeGreaterThan(0);
+
+    const baselinePartners = await app.inject({
+      method: "GET",
+      url: "/partners",
+    });
+    const baselinePartner = baselinePartners.json().find((item: { partnerId: string }) => item.partnerId === "partner_procure_pilot");
+    expect(baselinePartner).toBeTruthy();
+
+    const riskCase = await app.inject({
+      method: "POST",
+      url: "/risk/cases",
+      payload: {
+        entityType: "partner",
+        entityId: "partner_procure_pilot",
+        reasonType: "spam",
+        severity: "critical",
+        ownerId: "risk:test",
+        note: "Dispatch trust degradation",
+      },
+    });
+    expect(riskCase.statusCode).toBe(201);
+
+    const reputationRecords = await app.inject({
+      method: "GET",
+      url: "/reputation/records",
+    });
+    const latestPenalty = reputationRecords
+      .json()
+      .find((item: { partnerId: string; evidenceRefs: string[] }) => item.partnerId === "partner_procure_pilot" && item.evidenceRefs.includes(riskCase.json().caseId));
+    expect(latestPenalty).toBeTruthy();
+
+    const penalizedPartners = await app.inject({
+      method: "GET",
+      url: "/partners",
+    });
+    const penalizedPartner = penalizedPartners.json().find((item: { partnerId: string }) => item.partnerId === "partner_procure_pilot");
+    expect(penalizedPartner.trustScore).toBeLessThan(baselinePartner.trustScore);
+
+    const appeal = await app.inject({
+      method: "POST",
+      url: "/appeals",
+      payload: {
+        partnerId: "partner_procure_pilot",
+        targetRecordId: latestPenalty.recordId,
+        statement: "This penalty should be removed after review.",
+      },
+    });
+    expect(appeal.statusCode).toBe(201);
+
+    await app.inject({
+      method: "POST",
+      url: `/appeals/${appeal.json().appealId}/decision`,
+      payload: {
+        status: "approved",
+        decisionNote: "Penalty removed after operator review.",
+      },
+    });
+
+    const restoredPartners = await app.inject({
+      method: "GET",
+      url: "/partners",
+    });
+    const restoredPartner = restoredPartners.json().find((item: { partnerId: string }) => item.partnerId === "partner_procure_pilot");
+    expect(restoredPartner.trustScore).toBeCloseTo(baselinePartner.trustScore, 5);
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const penalty = await app.inject({
+        method: "POST",
+        url: "/risk/cases",
+        payload: {
+          entityType: "partner",
+          entityId: "partner_procure_pilot",
+          reasonType: "high_complaint",
+          severity: "critical",
+          ownerId: "risk:test",
+          note: `Dispatch block penalty ${attempt + 1}`,
+        },
+      });
+      expect(penalty.statusCode).toBe(201);
+    }
+
+    const dispatch = await app.inject({
+      method: "POST",
+      url: `/promotion-runs/${run.json().promotionRunId}/dispatch`,
+      payload: {},
+    });
+    expect(dispatch.statusCode).toBe(200);
+    expect(dispatch.json().targets[0].status).toBe("failed");
+    expect(dispatch.json().targets[0].responseCode).toBe("TRUST_BELOW_THRESHOLD");
+
+    await app.close();
+  });
+
+  it("freezes partner reserve on risk cases and releases it after an approved appeal", async () => {
+    const app = buildServer(createStore());
+
+    const deposit = await app.inject({
+      method: "POST",
+      url: "/partner-reserves/partner_procure_pilot/deposit",
+      payload: {
+        amount: 200,
+        sourceRef: "test.reserve.deposit",
+        reasonType: "manual_deposit",
+      },
+    });
+    expect(deposit.statusCode).toBe(201);
+    expect(deposit.json().availableAmount).toBe(200);
+
+    const riskCase = await app.inject({
+      method: "POST",
+      url: "/risk/cases",
+      payload: {
+        entityType: "partner",
+        entityId: "partner_procure_pilot",
+        reasonType: "claim_mismatch",
+        severity: "critical",
+        ownerId: "risk:test",
+        note: "Reserve freeze test.",
+      },
+    });
+    expect(riskCase.statusCode).toBe(201);
+
+    const frozenAccount = await app.inject({
+      method: "GET",
+      url: "/partner-reserves/partner_procure_pilot",
+    });
+    expect(frozenAccount.statusCode).toBe(200);
+    expect(frozenAccount.json().availableAmount).toBe(50);
+    expect(frozenAccount.json().frozenAmount).toBe(150);
+
+    const reputationRecords = await app.inject({
+      method: "GET",
+      url: "/reputation/records",
+    });
+    const targetRecord = reputationRecords
+      .json()
+      .find((item: { partnerId: string; evidenceRefs: string[] }) => item.partnerId === "partner_procure_pilot" && item.evidenceRefs.includes(riskCase.json().caseId));
+    expect(targetRecord).toBeTruthy();
+
+    const appeal = await app.inject({
+      method: "POST",
+      url: "/appeals",
+      payload: {
+        partnerId: "partner_procure_pilot",
+        targetRecordId: targetRecord.recordId,
+        statement: "Please release the frozen reserve.",
+      },
+    });
+    expect(appeal.statusCode).toBe(201);
+
+    const decision = await app.inject({
+      method: "POST",
+      url: `/appeals/${appeal.json().appealId}/decision`,
+      payload: {
+        status: "approved",
+        decisionNote: "Reserve release approved.",
+      },
+    });
+    expect(decision.statusCode).toBe(200);
+
+    const releasedAccount = await app.inject({
+      method: "GET",
+      url: "/partner-reserves/partner_procure_pilot",
+    });
+    expect(releasedAccount.statusCode).toBe(200);
+    expect(releasedAccount.json().availableAmount).toBe(200);
+    expect(releasedAccount.json().frozenAmount).toBe(0);
+    expect(releasedAccount.json().slashedAmount).toBe(0);
+
+    const ledger = await app.inject({
+      method: "GET",
+      url: "/partner-reserves/partner_procure_pilot/ledger",
+    });
+    expect(ledger.statusCode).toBe(200);
+    expect(ledger.json().some((item: { entryType: string }) => item.entryType === "deposit")).toBe(true);
+    expect(ledger.json().some((item: { entryType: string }) => item.entryType === "freeze")).toBe(true);
+    expect(ledger.json().some((item: { entryType: string }) => item.entryType === "release")).toBe(true);
+
+    await app.close();
+  });
+
+  it("slashes frozen reserve on rejected appeals and freezes reserve for settlement disputes", async () => {
+    const app = buildServer(createStore());
+
+    const deposit = await app.inject({
+      method: "POST",
+      url: "/partner-reserves/partner_procure_pilot/deposit",
+      payload: {
+        amount: 200,
+        sourceRef: "test.reserve.deposit.2",
+        reasonType: "manual_deposit",
+      },
+    });
+    expect(deposit.statusCode).toBe(201);
+
+    const riskCase = await app.inject({
+      method: "POST",
+      url: "/risk/cases",
+      payload: {
+        entityType: "partner",
+        entityId: "partner_procure_pilot",
+        reasonType: "spam",
+        severity: "high",
+        ownerId: "risk:test",
+        note: "Reserve slash test.",
+      },
+    });
+    expect(riskCase.statusCode).toBe(201);
+
+    const reputationRecords = await app.inject({
+      method: "GET",
+      url: "/reputation/records",
+    });
+    const targetRecord = reputationRecords
+      .json()
+      .find((item: { partnerId: string; evidenceRefs: string[] }) => item.partnerId === "partner_procure_pilot" && item.evidenceRefs.includes(riskCase.json().caseId));
+    expect(targetRecord).toBeTruthy();
+
+    const appeal = await app.inject({
+      method: "POST",
+      url: "/appeals",
+      payload: {
+        partnerId: "partner_procure_pilot",
+        targetRecordId: targetRecord.recordId,
+        statement: "This reserve should stay frozen.",
+      },
+    });
+    expect(appeal.statusCode).toBe(201);
+
+    const rejected = await app.inject({
+      method: "POST",
+      url: `/appeals/${appeal.json().appealId}/decision`,
+      payload: {
+        status: "rejected",
+        decisionNote: "Reserve slash upheld.",
+      },
+    });
+    expect(rejected.statusCode).toBe(200);
+
+    const slashedAccount = await app.inject({
+      method: "GET",
+      url: "/partner-reserves/partner_procure_pilot",
+    });
+    expect(slashedAccount.statusCode).toBe(200);
+    expect(slashedAccount.json().availableAmount).toBe(125);
+    expect(slashedAccount.json().frozenAmount).toBe(0);
+    expect(slashedAccount.json().slashedAmount).toBe(75);
+
+    const evaluation = await app.inject({
+      method: "POST",
+      url: "/opportunities/evaluate",
+      payload: {
+        intentId: "int_reserve_dispute_01",
+        category: "crm_software",
+        taskType: "compare_and_shortlist",
+        constraints: {
+          geo: ["UK"],
+        },
+        placement: "shortlist",
+        relevanceFloor: 0.72,
+        utilityFloor: 0.68,
+        sponsoredSlots: 4,
+        disclosureRequired: true,
+      },
+    });
+    expect(evaluation.statusCode).toBe(200);
+    const offer = evaluation
+      .json()
+      .shortlisted.find((item: { campaignId: string }) => item.campaignId === "cmp_hubflow");
+    expect(offer).toBeTruthy();
+
+    const receipt = await app.inject({
+      method: "POST",
+      url: "/events/receipts",
+      payload: buildCanonicalReceiptPayload({
+        receiptId: "rcpt_reserve_dispute_01",
+        intentId: "int_reserve_dispute_01",
+        offerId: offer.offerId,
+        campaignId: offer.campaignId,
+        partnerId: offer.partnerId,
+        eventType: "offer.presented",
+      }),
+    });
+    expect(receipt.statusCode).toBe(201);
+    const settlementId = receipt.json().settlement.settlementId;
+
+    const disputed = await app.inject({
+      method: "POST",
+      url: `/settlements/${settlementId}/dispute`,
+      payload: {},
+    });
+    expect(disputed.statusCode).toBe(200);
+
+    const disputedAccount = await app.inject({
+      method: "GET",
+      url: "/partner-reserves/partner_procure_pilot",
+    });
+    expect(disputedAccount.statusCode).toBe(200);
+    expect(disputedAccount.json().availableAmount).toBe(75);
+    expect(disputedAccount.json().frozenAmount).toBe(50);
+    expect(disputedAccount.json().slashedAmount).toBe(75);
+
+    const ledger = await app.inject({
+      method: "GET",
+      url: "/partner-reserves/partner_procure_pilot/ledger",
+    });
+    expect(ledger.statusCode).toBe(200);
+    expect(ledger.json().some((item: { entryType: string }) => item.entryType === "slash")).toBe(true);
+    expect(ledger.json().some((item: { sourceRef: string; entryType: string }) => item.entryType === "freeze" && item.sourceRef.startsWith("rep_settlement_dispute_"))).toBe(true);
+
+    await app.close();
+  });
+
   it("builds recruitment pipelines for existing leads and advances them through outreach", async () => {
     const app = buildServer(
       createStore({
@@ -1041,7 +2008,7 @@ describe("promotion-agent MVP flow", () => {
       url: `/recruitment/pipelines/${leadPipeline.pipelineId}/outreach-targets`,
       payload: {
         channel: "email",
-        contactPoint: "partnerships@example.com",
+        contactPoint: "partnerships@lumio.ai",
         messageTemplate: "Testing recruitment pipeline outreach.",
       },
     });
@@ -1082,6 +2049,52 @@ describe("promotion-agent MVP flow", () => {
     await app.close();
   });
 
+  it("rejects placeholder outreach contacts and placeholder discovery sources", async () => {
+    const app = buildServer(
+      createStore({
+        appMode: "demo",
+        seedData: buildDemoSeedData(),
+      }),
+    );
+
+    const source = await app.inject({
+      method: "POST",
+      url: "/discovery/sources",
+      payload: {
+        sourceType: "public_registry",
+        name: "Registry Placeholder",
+        baseUrl: "https://registry.example.com",
+        seedUrls: ["https://registry.example.com/agents"],
+        active: true,
+        crawlPolicy: { rateLimit: 1, maxDepth: 1 },
+        verticalHints: ["crm_software"],
+        geoHints: ["UK"],
+      },
+    });
+    expect(source.statusCode).toBe(400);
+    expect(source.json().message).toContain("real");
+
+    const pipelines = await app.inject({
+      method: "GET",
+      url: "/recruitment/pipelines?leadId=lead_demo_lighthouse",
+    });
+    const pipeline = pipelines.json()[0];
+
+    const outreach = await app.inject({
+      method: "POST",
+      url: `/recruitment/pipelines/${pipeline.pipelineId}/outreach-targets`,
+      payload: {
+        channel: "email",
+        contactPoint: "partnerships@example.com",
+        messageTemplate: "Testing placeholder rejection.",
+      },
+    });
+    expect(outreach.statusCode).toBe(400);
+    expect(outreach.json().message).toContain("real email");
+
+    await app.close();
+  });
+
   it("creates an email outreach draft when a discovered lead gains a new real contact", async () => {
     const store = createStore({
       appMode: "demo",
@@ -1101,7 +2114,7 @@ describe("promotion-agent MVP flow", () => {
       source: "Refresh Directory",
       sourceType: "partner_directory" as const,
       sourceRef: "src_refresh_directory",
-      cardUrl: "https://refresh-agent.example/contact-refresh-agent",
+      cardUrl: "https://refresh-agent.ai/contact-refresh-agent",
       endpointUrl: null,
       contactRef: null,
       missingFields: ["endpointUrl", "supportsDisclosure"],
@@ -1247,12 +2260,12 @@ describe("promotion-agent MVP flow", () => {
       pass: "smtp-auth-code",
       from: "Lumio Partnerships <songyili2026@163.com>",
       replyTo: "songyili2026@163.com",
-      trackingBaseUrl: "https://promo.lumio.example",
+      trackingBaseUrl: "https://promo.lumio.ai",
       transport: {
         async sendMail(message) {
           capturedMessage = message;
           return {
-            accepted: ["partnerships@example.com"],
+            accepted: ["partnerships@lumio.ai"],
             rejected: [],
             messageId: "smtp_message_123",
             response: "250 queued as smtp_message_123",
@@ -1287,7 +2300,7 @@ describe("promotion-agent MVP flow", () => {
       url: `/recruitment/pipelines/${pipeline.pipelineId}/outreach-targets`,
       payload: {
         channel: "email",
-        contactPoint: "partnerships@example.com",
+        contactPoint: "partnerships@lumio.ai",
         messageTemplate: autoDraft.messageTemplate,
         subjectLine: autoDraft.subjectLine,
         recommendationReason: autoDraft.recommendationReason,

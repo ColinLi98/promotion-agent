@@ -10,8 +10,11 @@ import {
   AppealCaseSchema,
   AuditEventSchema,
   AuditEventPageSchema,
+  CapabilityVerificationSnapshotSchema,
   BuyerAgentScorecardSchema,
   CampaignSchema,
+  ChannelProfileSchema,
+  CommercialExtensionSchema,
   CreditLedgerEntrySchema,
   DiscoveryRunSchema,
   DiscoverySourceInputSchema,
@@ -20,15 +23,21 @@ import {
   EventReceiptSchema,
   MeasurementFunnelQuerySchema,
   MeasurementFunnelSchema,
+  MonthlyHealthSnapshotSchema,
   OnboardingTaskSchema,
+  OPCProfileSchema,
   OutreachTargetSchema,
   PartnerAgentSchema,
+  PartnerReserveAccountSchema,
+  PartnerReserveLedgerEntrySchema,
+  PartnerOnboardingCaseSchema,
   PartnerReadinessSchema,
   PolicyCheckResultSchema,
   PromotionRunSchema,
   PromotionRunTargetSchema,
   RecruitmentPipelineSchema,
   ReputationRecordSchema,
+  RevenueEvidenceSchema,
   RiskCaseSchema,
   SettlementDeadLetterEntrySchema,
   SettlementDeadLetterPageSchema,
@@ -39,8 +48,11 @@ import {
   type AuditEvent,
   type AuditEventFilter,
   type AuditEventPage,
+  type CapabilityVerificationSnapshot,
   type BuyerAgentScorecard,
   type Campaign,
+  type ChannelProfile,
+  type CommercialExtension,
   type CreditLedgerEntry,
   type DiscoveryRun,
   type DiscoverySource,
@@ -49,15 +61,21 @@ import {
   type EventReceipt,
   type MeasurementFunnel,
   type MeasurementFunnelQuery,
+  type MonthlyHealthSnapshot,
   type OnboardingTask,
+  type OPCProfile,
   type OutreachTarget,
   type PartnerAgent,
+  type PartnerReserveAccount,
+  type PartnerReserveLedgerEntry,
+  type PartnerOnboardingCase,
   type PartnerReadiness,
   type PolicyCheckResult,
   type PromotionRun,
   type PromotionRunTarget,
   type RecruitmentPipeline,
   type ReputationRecord,
+  type RevenueEvidence,
   type RiskCase,
   type SettlementDeadLetterEntry,
   type SettlementDeadLetterFilter,
@@ -69,6 +87,8 @@ import {
   type VerificationChecklist,
   type VerificationRecord,
   VerificationRecordSchema,
+  type VerificationReview,
+  VerificationReviewSchema,
   type AttributionRow,
   type BillingDraft,
   type WorkspaceSubscription,
@@ -566,7 +586,7 @@ export class PostgresPromotionAgentRepository implements PromotionAgentRepositor
   async listCampaigns() {
     const result = await this.pool.query(`
       SELECT campaign_id, data_provenance, workspace_id, promotion_plan_id, advertiser, external_ref, source_document_url, category, regions, targeting_partner_ids, billing_model, payout_amount, currency,
-             budget, status, disclosure_text, policy_pass, min_trust, link_bundle, offer, proof_bundle
+             budget, status, disclosure_text, policy_pass, min_trust, opc_profile_id, opc_review_decision, scale_eligibility, link_bundle, offer, proof_bundle
       FROM campaigns
       ORDER BY advertiser ASC
     `);
@@ -578,7 +598,7 @@ export class PostgresPromotionAgentRepository implements PromotionAgentRepositor
     const result = await this.pool.query(
       `
         SELECT campaign_id, data_provenance, workspace_id, promotion_plan_id, advertiser, external_ref, source_document_url, category, regions, targeting_partner_ids, billing_model, payout_amount, currency,
-               budget, status, disclosure_text, policy_pass, min_trust, link_bundle, offer, proof_bundle
+               budget, status, disclosure_text, policy_pass, min_trust, opc_profile_id, opc_review_decision, scale_eligibility, link_bundle, offer, proof_bundle
         FROM campaigns
         WHERE campaign_id = $1
       `,
@@ -594,9 +614,9 @@ export class PostgresPromotionAgentRepository implements PromotionAgentRepositor
       `
         INSERT INTO campaigns (
           campaign_id, data_provenance, workspace_id, promotion_plan_id, advertiser, external_ref, source_document_url, category, regions, targeting_partner_ids, billing_model, payout_amount, currency,
-          budget, status, disclosure_text, policy_pass, min_trust, link_bundle, offer, proof_bundle, created_at, updated_at
+          budget, status, disclosure_text, policy_pass, min_trust, opc_profile_id, opc_review_decision, scale_eligibility, link_bundle, offer, proof_bundle, created_at, updated_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb, $20::jsonb, $21::jsonb, $22, $22
+          $1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21::jsonb, $22::jsonb, $23::jsonb, $24, $24
         )
         ON CONFLICT (campaign_id) DO UPDATE SET
           data_provenance = EXCLUDED.data_provenance,
@@ -616,6 +636,9 @@ export class PostgresPromotionAgentRepository implements PromotionAgentRepositor
           disclosure_text = EXCLUDED.disclosure_text,
           policy_pass = EXCLUDED.policy_pass,
           min_trust = EXCLUDED.min_trust,
+          opc_profile_id = EXCLUDED.opc_profile_id,
+          opc_review_decision = EXCLUDED.opc_review_decision,
+          scale_eligibility = EXCLUDED.scale_eligibility,
           link_bundle = EXCLUDED.link_bundle,
           offer = EXCLUDED.offer,
           proof_bundle = EXCLUDED.proof_bundle,
@@ -640,6 +663,9 @@ export class PostgresPromotionAgentRepository implements PromotionAgentRepositor
         parsed.disclosureText,
         parsed.policyPass,
         parsed.minTrust,
+        parsed.opcProfileId,
+        parsed.opcReviewDecision,
+        parsed.scaleEligibility,
         toJson(parsed.linkBundle),
         toJson(parsed.offer),
         toJson(parsed.proofBundle),
@@ -699,6 +725,736 @@ export class PostgresPromotionAgentRepository implements PromotionAgentRepositor
         parsed.updatedAt,
         parsed.verifiedBy,
         parsed.verificationNote,
+      ],
+    );
+  }
+
+  async listOpcProfiles() {
+    const result = await this.pool.query(`
+      SELECT opc_id, data_provenance, legal_entity_name, registration_id, operator_type, primary_business_type,
+             business_model_primary, website_url, product_page_url, course_page_url, entity_verification_status,
+             onboarding_channel, created_at, updated_at
+      FROM opc_profiles
+      ORDER BY updated_at DESC, created_at DESC
+    `);
+
+    return result.rows.map((row) =>
+      OPCProfileSchema.parse({
+        opcId: row.opc_id,
+        dataProvenance: row.data_provenance,
+        legalEntityName: row.legal_entity_name,
+        registrationId: row.registration_id,
+        operatorType: row.operator_type,
+        primaryBusinessType: row.primary_business_type,
+        businessModelPrimary: row.business_model_primary,
+        websiteUrl: row.website_url,
+        productPageUrl: row.product_page_url,
+        coursePageUrl: row.course_page_url,
+        entityVerificationStatus: row.entity_verification_status,
+        onboardingChannel: row.onboarding_channel,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }),
+    );
+  }
+
+  async getOpcProfile(opcId: string) {
+    const result = await this.pool.query(
+      `
+        SELECT opc_id, data_provenance, legal_entity_name, registration_id, operator_type, primary_business_type,
+               business_model_primary, website_url, product_page_url, course_page_url, entity_verification_status,
+               onboarding_channel, created_at, updated_at
+        FROM opc_profiles
+        WHERE opc_id = $1
+      `,
+      [opcId],
+    );
+
+    return result.rows[0]
+      ? OPCProfileSchema.parse({
+          opcId: result.rows[0].opc_id,
+          dataProvenance: result.rows[0].data_provenance,
+          legalEntityName: result.rows[0].legal_entity_name,
+          registrationId: result.rows[0].registration_id,
+          operatorType: result.rows[0].operator_type,
+          primaryBusinessType: result.rows[0].primary_business_type,
+          businessModelPrimary: result.rows[0].business_model_primary,
+          websiteUrl: result.rows[0].website_url,
+          productPageUrl: result.rows[0].product_page_url,
+          coursePageUrl: result.rows[0].course_page_url,
+          entityVerificationStatus: result.rows[0].entity_verification_status,
+          onboardingChannel: result.rows[0].onboarding_channel,
+          createdAt: result.rows[0].created_at,
+          updatedAt: result.rows[0].updated_at,
+        })
+      : null;
+  }
+
+  async upsertOpcProfile(profile: OPCProfile) {
+    const parsed = OPCProfileSchema.parse(profile);
+    await this.pool.query(
+      `
+        INSERT INTO opc_profiles (
+          opc_id, data_provenance, legal_entity_name, registration_id, operator_type, primary_business_type,
+          business_model_primary, website_url, product_page_url, course_page_url, entity_verification_status,
+          onboarding_channel, created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6,
+          $7, $8, $9, $10, $11,
+          $12, $13, $14
+        )
+        ON CONFLICT (opc_id) DO UPDATE SET
+          data_provenance = EXCLUDED.data_provenance,
+          legal_entity_name = EXCLUDED.legal_entity_name,
+          registration_id = EXCLUDED.registration_id,
+          operator_type = EXCLUDED.operator_type,
+          primary_business_type = EXCLUDED.primary_business_type,
+          business_model_primary = EXCLUDED.business_model_primary,
+          website_url = EXCLUDED.website_url,
+          product_page_url = EXCLUDED.product_page_url,
+          course_page_url = EXCLUDED.course_page_url,
+          entity_verification_status = EXCLUDED.entity_verification_status,
+          onboarding_channel = EXCLUDED.onboarding_channel,
+          updated_at = EXCLUDED.updated_at
+      `,
+      [
+        parsed.opcId,
+        parsed.dataProvenance,
+        parsed.legalEntityName,
+        parsed.registrationId,
+        parsed.operatorType,
+        parsed.primaryBusinessType,
+        parsed.businessModelPrimary,
+        parsed.websiteUrl,
+        parsed.productPageUrl,
+        parsed.coursePageUrl,
+        parsed.entityVerificationStatus,
+        parsed.onboardingChannel,
+        parsed.createdAt,
+        parsed.updatedAt,
+      ],
+    );
+  }
+
+  async listRevenueEvidence(opcId?: string) {
+    const values: unknown[] = [];
+    const whereClause = opcId ? `WHERE opc_id = $1` : "";
+    if (opcId) values.push(opcId);
+    const result = await this.pool.query(
+      `
+        SELECT evidence_id, data_provenance, opc_id, period_start, period_end, payout_source, settlement_amount,
+               bank_inflow_amount, order_count, refund_amount, chargeback_amount, variable_cost_estimate,
+               contribution_profit_estimate, reconciliation_status, source_ref, created_at, updated_at
+        FROM revenue_evidence
+        ${whereClause}
+        ORDER BY period_end DESC, created_at DESC
+      `,
+      values,
+    );
+
+    return result.rows.map((row) =>
+      RevenueEvidenceSchema.parse({
+        evidenceId: row.evidence_id,
+        dataProvenance: row.data_provenance,
+        opcId: row.opc_id,
+        periodStart: row.period_start,
+        periodEnd: row.period_end,
+        payoutSource: row.payout_source,
+        settlementAmount: row.settlement_amount,
+        bankInflowAmount: row.bank_inflow_amount,
+        orderCount: row.order_count,
+        refundAmount: row.refund_amount,
+        chargebackAmount: row.chargeback_amount,
+        variableCostEstimate: row.variable_cost_estimate,
+        contributionProfitEstimate: row.contribution_profit_estimate,
+        reconciliationStatus: row.reconciliation_status,
+        sourceRef: row.source_ref,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }),
+    );
+  }
+
+  async upsertRevenueEvidence(evidence: RevenueEvidence) {
+    const parsed = RevenueEvidenceSchema.parse(evidence);
+    await this.pool.query(
+      `
+        INSERT INTO revenue_evidence (
+          evidence_id, data_provenance, opc_id, period_start, period_end, payout_source, settlement_amount,
+          bank_inflow_amount, order_count, refund_amount, chargeback_amount, variable_cost_estimate,
+          contribution_profit_estimate, reconciliation_status, source_ref, created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7,
+          $8, $9, $10, $11, $12,
+          $13, $14, $15, $16, $17
+        )
+        ON CONFLICT (evidence_id) DO UPDATE SET
+          data_provenance = EXCLUDED.data_provenance,
+          opc_id = EXCLUDED.opc_id,
+          period_start = EXCLUDED.period_start,
+          period_end = EXCLUDED.period_end,
+          payout_source = EXCLUDED.payout_source,
+          settlement_amount = EXCLUDED.settlement_amount,
+          bank_inflow_amount = EXCLUDED.bank_inflow_amount,
+          order_count = EXCLUDED.order_count,
+          refund_amount = EXCLUDED.refund_amount,
+          chargeback_amount = EXCLUDED.chargeback_amount,
+          variable_cost_estimate = EXCLUDED.variable_cost_estimate,
+          contribution_profit_estimate = EXCLUDED.contribution_profit_estimate,
+          reconciliation_status = EXCLUDED.reconciliation_status,
+          source_ref = EXCLUDED.source_ref,
+          updated_at = EXCLUDED.updated_at
+      `,
+      [
+        parsed.evidenceId,
+        parsed.dataProvenance,
+        parsed.opcId,
+        parsed.periodStart,
+        parsed.periodEnd,
+        parsed.payoutSource,
+        parsed.settlementAmount,
+        parsed.bankInflowAmount,
+        parsed.orderCount,
+        parsed.refundAmount,
+        parsed.chargebackAmount,
+        parsed.variableCostEstimate,
+        parsed.contributionProfitEstimate,
+        parsed.reconciliationStatus,
+        parsed.sourceRef,
+        parsed.createdAt,
+        parsed.updatedAt,
+      ],
+    );
+  }
+
+  async listVerificationReviews(opcId?: string) {
+    const values: unknown[] = [];
+    const whereClause = opcId ? `WHERE opc_id = $1` : "";
+    if (opcId) values.push(opcId);
+    const result = await this.pool.query(
+      `
+        SELECT review_id, data_provenance, opc_id, verification_score, guru_risk_score,
+               external_customer_revenue_ratio, knowledge_revenue_ratio, proof_bundle_status,
+               customer_sample_status, page_classification, decision, reviewer_owner, valid_until,
+               decision_reason, reviewed_at
+        FROM verification_reviews
+        ${whereClause}
+        ORDER BY reviewed_at DESC
+      `,
+      values,
+    );
+
+    return result.rows.map((row) =>
+      VerificationReviewSchema.parse({
+        reviewId: row.review_id,
+        dataProvenance: row.data_provenance,
+        opcId: row.opc_id,
+        verificationScore: row.verification_score,
+        guruRiskScore: row.guru_risk_score,
+        externalCustomerRevenueRatio: row.external_customer_revenue_ratio,
+        knowledgeRevenueRatio: row.knowledge_revenue_ratio,
+        proofBundleStatus: row.proof_bundle_status,
+        customerSampleStatus: row.customer_sample_status,
+        pageClassification: row.page_classification,
+        decision: row.decision,
+        reviewerOwner: row.reviewer_owner,
+        validUntil: row.valid_until,
+        decisionReason: row.decision_reason,
+        reviewedAt: row.reviewed_at,
+      }),
+    );
+  }
+
+  async upsertVerificationReview(review: VerificationReview) {
+    const parsed = VerificationReviewSchema.parse(review);
+    await this.pool.query(
+      `
+        INSERT INTO verification_reviews (
+          review_id, data_provenance, opc_id, verification_score, guru_risk_score,
+          external_customer_revenue_ratio, knowledge_revenue_ratio, proof_bundle_status,
+          customer_sample_status, page_classification, decision, reviewer_owner, valid_until,
+          decision_reason, reviewed_at
+        ) VALUES (
+          $1, $2, $3, $4, $5,
+          $6, $7, $8,
+          $9, $10, $11, $12, $13,
+          $14, $15
+        )
+        ON CONFLICT (review_id) DO UPDATE SET
+          data_provenance = EXCLUDED.data_provenance,
+          opc_id = EXCLUDED.opc_id,
+          verification_score = EXCLUDED.verification_score,
+          guru_risk_score = EXCLUDED.guru_risk_score,
+          external_customer_revenue_ratio = EXCLUDED.external_customer_revenue_ratio,
+          knowledge_revenue_ratio = EXCLUDED.knowledge_revenue_ratio,
+          proof_bundle_status = EXCLUDED.proof_bundle_status,
+          customer_sample_status = EXCLUDED.customer_sample_status,
+          page_classification = EXCLUDED.page_classification,
+          decision = EXCLUDED.decision,
+          reviewer_owner = EXCLUDED.reviewer_owner,
+          valid_until = EXCLUDED.valid_until,
+          decision_reason = EXCLUDED.decision_reason,
+          reviewed_at = EXCLUDED.reviewed_at
+      `,
+      [
+        parsed.reviewId,
+        parsed.dataProvenance,
+        parsed.opcId,
+        parsed.verificationScore,
+        parsed.guruRiskScore,
+        parsed.externalCustomerRevenueRatio,
+        parsed.knowledgeRevenueRatio,
+        parsed.proofBundleStatus,
+        parsed.customerSampleStatus,
+        parsed.pageClassification,
+        parsed.decision,
+        parsed.reviewerOwner,
+        parsed.validUntil,
+        parsed.decisionReason,
+        parsed.reviewedAt,
+      ],
+    );
+  }
+
+  async listMonthlyHealthSnapshots(opcId?: string) {
+    const values: unknown[] = [];
+    const whereClause = opcId ? `WHERE opc_id = $1` : "";
+    if (opcId) values.push(opcId);
+    const result = await this.pool.query(
+      `
+        SELECT snapshot_id, data_provenance, opc_id, month, net_cash_in, contribution_profit_estimate,
+               refund_rate, chargeback_rate, external_customer_revenue_ratio, knowledge_revenue_ratio,
+               traffic_concentration, risk_delta, status_recommendation, escalation_required, created_at
+        FROM monthly_health_snapshots
+        ${whereClause}
+        ORDER BY month DESC, created_at DESC
+      `,
+      values,
+    );
+
+    return result.rows.map((row) =>
+      MonthlyHealthSnapshotSchema.parse({
+        snapshotId: row.snapshot_id,
+        dataProvenance: row.data_provenance,
+        opcId: row.opc_id,
+        month: row.month,
+        netCashIn: row.net_cash_in,
+        contributionProfitEstimate: row.contribution_profit_estimate,
+        refundRate: row.refund_rate,
+        chargebackRate: row.chargeback_rate,
+        externalCustomerRevenueRatio: row.external_customer_revenue_ratio,
+        knowledgeRevenueRatio: row.knowledge_revenue_ratio,
+        trafficConcentration: row.traffic_concentration,
+        riskDelta: row.risk_delta,
+        statusRecommendation: row.status_recommendation,
+        escalationRequired: row.escalation_required,
+        createdAt: row.created_at,
+      }),
+    );
+  }
+
+  async upsertMonthlyHealthSnapshot(snapshot: MonthlyHealthSnapshot) {
+    const parsed = MonthlyHealthSnapshotSchema.parse(snapshot);
+    await this.pool.query(
+      `
+        INSERT INTO monthly_health_snapshots (
+          snapshot_id, data_provenance, opc_id, month, net_cash_in, contribution_profit_estimate,
+          refund_rate, chargeback_rate, external_customer_revenue_ratio, knowledge_revenue_ratio,
+          traffic_concentration, risk_delta, status_recommendation, escalation_required, created_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6,
+          $7, $8, $9, $10,
+          $11, $12, $13, $14, $15
+        )
+        ON CONFLICT (snapshot_id) DO UPDATE SET
+          data_provenance = EXCLUDED.data_provenance,
+          opc_id = EXCLUDED.opc_id,
+          month = EXCLUDED.month,
+          net_cash_in = EXCLUDED.net_cash_in,
+          contribution_profit_estimate = EXCLUDED.contribution_profit_estimate,
+          refund_rate = EXCLUDED.refund_rate,
+          chargeback_rate = EXCLUDED.chargeback_rate,
+          external_customer_revenue_ratio = EXCLUDED.external_customer_revenue_ratio,
+          knowledge_revenue_ratio = EXCLUDED.knowledge_revenue_ratio,
+          traffic_concentration = EXCLUDED.traffic_concentration,
+          risk_delta = EXCLUDED.risk_delta,
+          status_recommendation = EXCLUDED.status_recommendation,
+          escalation_required = EXCLUDED.escalation_required
+      `,
+      [
+        parsed.snapshotId,
+        parsed.dataProvenance,
+        parsed.opcId,
+        parsed.month,
+        parsed.netCashIn,
+        parsed.contributionProfitEstimate,
+        parsed.refundRate,
+        parsed.chargebackRate,
+        parsed.externalCustomerRevenueRatio,
+        parsed.knowledgeRevenueRatio,
+        parsed.trafficConcentration,
+        parsed.riskDelta,
+        parsed.statusRecommendation,
+        parsed.escalationRequired,
+        parsed.createdAt,
+      ],
+    );
+  }
+
+  async listChannelProfiles() {
+    const result = await this.pool.query(`
+      SELECT channel_id, data_provenance, channel_type, operator_name, discovery_method, onboarding_mode,
+             expected_reach_proxy, supports_receipts, rate_limit_policy, cost_model, channel_status,
+             created_at, updated_at
+      FROM channel_profiles
+      ORDER BY updated_at DESC, created_at DESC
+    `);
+
+    return result.rows.map((row) =>
+      ChannelProfileSchema.parse({
+        channelId: row.channel_id,
+        dataProvenance: row.data_provenance,
+        channelType: row.channel_type,
+        operatorName: row.operator_name,
+        discoveryMethod: row.discovery_method,
+        onboardingMode: row.onboarding_mode,
+        expectedReachProxy: row.expected_reach_proxy,
+        supportsReceipts: row.supports_receipts,
+        rateLimitPolicy: row.rate_limit_policy,
+        costModel: row.cost_model,
+        channelStatus: row.channel_status,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }),
+    );
+  }
+
+  async getChannelProfile(channelId: string) {
+    const result = await this.pool.query(
+      `
+        SELECT channel_id, data_provenance, channel_type, operator_name, discovery_method, onboarding_mode,
+               expected_reach_proxy, supports_receipts, rate_limit_policy, cost_model, channel_status,
+               created_at, updated_at
+        FROM channel_profiles
+        WHERE channel_id = $1
+      `,
+      [channelId],
+    );
+
+    return result.rows[0]
+      ? ChannelProfileSchema.parse({
+          channelId: result.rows[0].channel_id,
+          dataProvenance: result.rows[0].data_provenance,
+          channelType: result.rows[0].channel_type,
+          operatorName: result.rows[0].operator_name,
+          discoveryMethod: result.rows[0].discovery_method,
+          onboardingMode: result.rows[0].onboarding_mode,
+          expectedReachProxy: result.rows[0].expected_reach_proxy,
+          supportsReceipts: result.rows[0].supports_receipts,
+          rateLimitPolicy: result.rows[0].rate_limit_policy,
+          costModel: result.rows[0].cost_model,
+          channelStatus: result.rows[0].channel_status,
+          createdAt: result.rows[0].created_at,
+          updatedAt: result.rows[0].updated_at,
+        })
+      : null;
+  }
+
+  async upsertChannelProfile(profile: ChannelProfile) {
+    const parsed = ChannelProfileSchema.parse(profile);
+    await this.pool.query(
+      `
+        INSERT INTO channel_profiles (
+          channel_id, data_provenance, channel_type, operator_name, discovery_method, onboarding_mode,
+          expected_reach_proxy, supports_receipts, rate_limit_policy, cost_model, channel_status,
+          created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6,
+          $7, $8::jsonb, $9, $10, $11,
+          $12, $13
+        )
+        ON CONFLICT (channel_id) DO UPDATE SET
+          data_provenance = EXCLUDED.data_provenance,
+          channel_type = EXCLUDED.channel_type,
+          operator_name = EXCLUDED.operator_name,
+          discovery_method = EXCLUDED.discovery_method,
+          onboarding_mode = EXCLUDED.onboarding_mode,
+          expected_reach_proxy = EXCLUDED.expected_reach_proxy,
+          supports_receipts = EXCLUDED.supports_receipts,
+          rate_limit_policy = EXCLUDED.rate_limit_policy,
+          cost_model = EXCLUDED.cost_model,
+          channel_status = EXCLUDED.channel_status,
+          updated_at = EXCLUDED.updated_at
+      `,
+      [
+        parsed.channelId,
+        parsed.dataProvenance,
+        parsed.channelType,
+        parsed.operatorName,
+        parsed.discoveryMethod,
+        parsed.onboardingMode,
+        parsed.expectedReachProxy,
+        toJson(parsed.supportsReceipts),
+        parsed.rateLimitPolicy,
+        parsed.costModel,
+        parsed.channelStatus,
+        parsed.createdAt,
+        parsed.updatedAt,
+      ],
+    );
+  }
+
+  async listCommercialExtensions(partnerId?: string) {
+    const values: unknown[] = [];
+    const whereClause = partnerId ? `WHERE partner_id = $1` : "";
+    if (partnerId) values.push(partnerId);
+    const result = await this.pool.query(
+      `
+        SELECT extension_id, data_provenance, partner_id, extension_version, accepts_commercial_opportunity,
+               placement_types, disclosure_required, receipt_modes, billing_modes, supported_intent_domains,
+               max_qps, policy_endpoint, contract_required, signature_scheme, created_at, updated_at
+        FROM commercial_extensions
+        ${whereClause}
+        ORDER BY updated_at DESC, created_at DESC
+      `,
+      values,
+    );
+
+    return result.rows.map((row) =>
+      CommercialExtensionSchema.parse({
+        extensionId: row.extension_id,
+        dataProvenance: row.data_provenance,
+        partnerId: row.partner_id,
+        extensionVersion: row.extension_version,
+        acceptsCommercialOpportunity: row.accepts_commercial_opportunity,
+        placementTypes: row.placement_types,
+        disclosureRequired: row.disclosure_required,
+        receiptModes: row.receipt_modes,
+        billingModes: row.billing_modes,
+        supportedIntentDomains: row.supported_intent_domains,
+        maxQps: row.max_qps,
+        policyEndpoint: row.policy_endpoint,
+        contractRequired: row.contract_required,
+        signatureScheme: row.signature_scheme,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }),
+    );
+  }
+
+  async upsertCommercialExtension(extension: CommercialExtension) {
+    const parsed = CommercialExtensionSchema.parse(extension);
+    await this.pool.query(
+      `
+        INSERT INTO commercial_extensions (
+          extension_id, data_provenance, partner_id, extension_version, accepts_commercial_opportunity,
+          placement_types, disclosure_required, receipt_modes, billing_modes, supported_intent_domains,
+          max_qps, policy_endpoint, contract_required, signature_scheme, created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5,
+          $6::jsonb, $7, $8::jsonb, $9::jsonb, $10::jsonb,
+          $11, $12, $13, $14, $15, $16
+        )
+        ON CONFLICT (extension_id) DO UPDATE SET
+          data_provenance = EXCLUDED.data_provenance,
+          partner_id = EXCLUDED.partner_id,
+          extension_version = EXCLUDED.extension_version,
+          accepts_commercial_opportunity = EXCLUDED.accepts_commercial_opportunity,
+          placement_types = EXCLUDED.placement_types,
+          disclosure_required = EXCLUDED.disclosure_required,
+          receipt_modes = EXCLUDED.receipt_modes,
+          billing_modes = EXCLUDED.billing_modes,
+          supported_intent_domains = EXCLUDED.supported_intent_domains,
+          max_qps = EXCLUDED.max_qps,
+          policy_endpoint = EXCLUDED.policy_endpoint,
+          contract_required = EXCLUDED.contract_required,
+          signature_scheme = EXCLUDED.signature_scheme,
+          updated_at = EXCLUDED.updated_at
+      `,
+      [
+        parsed.extensionId,
+        parsed.dataProvenance,
+        parsed.partnerId,
+        parsed.extensionVersion,
+        parsed.acceptsCommercialOpportunity,
+        toJson(parsed.placementTypes),
+        parsed.disclosureRequired,
+        toJson(parsed.receiptModes),
+        toJson(parsed.billingModes),
+        toJson(parsed.supportedIntentDomains),
+        parsed.maxQps,
+        parsed.policyEndpoint,
+        parsed.contractRequired,
+        parsed.signatureScheme,
+        parsed.createdAt,
+        parsed.updatedAt,
+      ],
+    );
+  }
+
+  async listPartnerOnboardingCases(agentLeadId?: string) {
+    const values: unknown[] = [];
+    const whereClause = agentLeadId ? `WHERE agent_lead_id = $1` : "";
+    if (agentLeadId) values.push(agentLeadId);
+    const result = await this.pool.query(
+      `
+        SELECT case_id, data_provenance, agent_lead_id, channel_id, current_stage, contract_status,
+               sandbox_status, pilot_budget_limit, technical_owner, business_owner, blocker_code,
+               next_review_at, launched_at, created_at, updated_at
+        FROM partner_onboarding_cases
+        ${whereClause}
+        ORDER BY updated_at DESC, created_at DESC
+      `,
+      values,
+    );
+
+    return result.rows.map((row) =>
+      PartnerOnboardingCaseSchema.parse({
+        caseId: row.case_id,
+        dataProvenance: row.data_provenance,
+        agentLeadId: row.agent_lead_id,
+        channelId: row.channel_id,
+        currentStage: row.current_stage,
+        contractStatus: row.contract_status,
+        sandboxStatus: row.sandbox_status,
+        pilotBudgetLimit: row.pilot_budget_limit,
+        technicalOwner: row.technical_owner,
+        businessOwner: row.business_owner,
+        blockerCode: row.blocker_code,
+        nextReviewAt: row.next_review_at,
+        launchedAt: row.launched_at,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }),
+    );
+  }
+
+  async upsertPartnerOnboardingCase(onboardingCase: PartnerOnboardingCase) {
+    const parsed = PartnerOnboardingCaseSchema.parse(onboardingCase);
+    await this.pool.query(
+      `
+        INSERT INTO partner_onboarding_cases (
+          case_id, data_provenance, agent_lead_id, channel_id, current_stage, contract_status,
+          sandbox_status, pilot_budget_limit, technical_owner, business_owner, blocker_code,
+          next_review_at, launched_at, created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6,
+          $7, $8, $9, $10, $11,
+          $12, $13, $14, $15
+        )
+        ON CONFLICT (case_id) DO UPDATE SET
+          data_provenance = EXCLUDED.data_provenance,
+          agent_lead_id = EXCLUDED.agent_lead_id,
+          channel_id = EXCLUDED.channel_id,
+          current_stage = EXCLUDED.current_stage,
+          contract_status = EXCLUDED.contract_status,
+          sandbox_status = EXCLUDED.sandbox_status,
+          pilot_budget_limit = EXCLUDED.pilot_budget_limit,
+          technical_owner = EXCLUDED.technical_owner,
+          business_owner = EXCLUDED.business_owner,
+          blocker_code = EXCLUDED.blocker_code,
+          next_review_at = EXCLUDED.next_review_at,
+          launched_at = EXCLUDED.launched_at,
+          updated_at = EXCLUDED.updated_at
+      `,
+      [
+        parsed.caseId,
+        parsed.dataProvenance,
+        parsed.agentLeadId,
+        parsed.channelId,
+        parsed.currentStage,
+        parsed.contractStatus,
+        parsed.sandboxStatus,
+        parsed.pilotBudgetLimit,
+        parsed.technicalOwner,
+        parsed.businessOwner,
+        parsed.blockerCode,
+        parsed.nextReviewAt,
+        parsed.launchedAt,
+        parsed.createdAt,
+        parsed.updatedAt,
+      ],
+    );
+  }
+
+  async listCapabilityVerificationSnapshots(agentLeadId?: string) {
+    const values: unknown[] = [];
+    const whereClause = agentLeadId ? `WHERE agent_lead_id = $1` : "";
+    if (agentLeadId) values.push(agentLeadId);
+    const result = await this.pool.query(
+      `
+        SELECT snapshot_id, data_provenance, agent_lead_id, public_card_valid, auth_test_passed,
+               opportunity_test_passed, receipt_test_passed, presentation_receipt_supported,
+               mean_latency_ms, success_rate_7d, risk_tier, last_probe_at, recommended_tier, created_at
+        FROM capability_verification_snapshots
+        ${whereClause}
+        ORDER BY created_at DESC
+      `,
+      values,
+    );
+
+    return result.rows.map((row) =>
+      CapabilityVerificationSnapshotSchema.parse({
+        snapshotId: row.snapshot_id,
+        dataProvenance: row.data_provenance,
+        agentLeadId: row.agent_lead_id,
+        publicCardValid: row.public_card_valid,
+        authTestPassed: row.auth_test_passed,
+        opportunityTestPassed: row.opportunity_test_passed,
+        receiptTestPassed: row.receipt_test_passed,
+        presentationReceiptSupported: row.presentation_receipt_supported,
+        meanLatencyMs: row.mean_latency_ms,
+        successRate7d: row.success_rate_7d,
+        riskTier: row.risk_tier,
+        lastProbeAt: row.last_probe_at,
+        recommendedTier: row.recommended_tier,
+        createdAt: row.created_at,
+      }),
+    );
+  }
+
+  async upsertCapabilityVerificationSnapshot(snapshot: CapabilityVerificationSnapshot) {
+    const parsed = CapabilityVerificationSnapshotSchema.parse(snapshot);
+    await this.pool.query(
+      `
+        INSERT INTO capability_verification_snapshots (
+          snapshot_id, data_provenance, agent_lead_id, public_card_valid, auth_test_passed,
+          opportunity_test_passed, receipt_test_passed, presentation_receipt_supported,
+          mean_latency_ms, success_rate_7d, risk_tier, last_probe_at, recommended_tier, created_at
+        ) VALUES (
+          $1, $2, $3, $4, $5,
+          $6, $7, $8,
+          $9, $10, $11, $12, $13, $14
+        )
+        ON CONFLICT (snapshot_id) DO UPDATE SET
+          data_provenance = EXCLUDED.data_provenance,
+          agent_lead_id = EXCLUDED.agent_lead_id,
+          public_card_valid = EXCLUDED.public_card_valid,
+          auth_test_passed = EXCLUDED.auth_test_passed,
+          opportunity_test_passed = EXCLUDED.opportunity_test_passed,
+          receipt_test_passed = EXCLUDED.receipt_test_passed,
+          presentation_receipt_supported = EXCLUDED.presentation_receipt_supported,
+          mean_latency_ms = EXCLUDED.mean_latency_ms,
+          success_rate_7d = EXCLUDED.success_rate_7d,
+          risk_tier = EXCLUDED.risk_tier,
+          last_probe_at = EXCLUDED.last_probe_at,
+          recommended_tier = EXCLUDED.recommended_tier
+      `,
+      [
+        parsed.snapshotId,
+        parsed.dataProvenance,
+        parsed.agentLeadId,
+        parsed.publicCardValid,
+        parsed.authTestPassed,
+        parsed.opportunityTestPassed,
+        parsed.receiptTestPassed,
+        parsed.presentationReceiptSupported,
+        parsed.meanLatencyMs,
+        parsed.successRate7d,
+        parsed.riskTier,
+        parsed.lastProbeAt,
+        parsed.recommendedTier,
+        parsed.createdAt,
       ],
     );
   }
@@ -1271,6 +2027,115 @@ export class PostgresPromotionAgentRepository implements PromotionAgentRepositor
         parsed.source,
         parsed.campaignId,
         parsed.promotionRunId,
+        parsed.occurredAt,
+      ],
+    );
+  }
+
+  async getPartnerReserveAccount(partnerId: string) {
+    const result = await this.pool.query(
+      `
+        SELECT partner_id, currency, available_amount, frozen_amount, slashed_amount, updated_at
+        FROM partner_reserve_accounts
+        WHERE partner_id = $1
+      `,
+      [partnerId],
+    );
+
+    return result.rows[0]
+      ? PartnerReserveAccountSchema.parse({
+          partnerId: result.rows[0].partner_id,
+          currency: result.rows[0].currency,
+          availableAmount: result.rows[0].available_amount,
+          frozenAmount: result.rows[0].frozen_amount,
+          slashedAmount: result.rows[0].slashed_amount,
+          updatedAt: result.rows[0].updated_at,
+        })
+      : null;
+  }
+
+  async upsertPartnerReserveAccount(account: PartnerReserveAccount) {
+    const parsed = PartnerReserveAccountSchema.parse(account);
+    await this.pool.query(
+      `
+        INSERT INTO partner_reserve_accounts (
+          partner_id, currency, available_amount, frozen_amount, slashed_amount, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6
+        )
+        ON CONFLICT (partner_id) DO UPDATE SET
+          currency = EXCLUDED.currency,
+          available_amount = EXCLUDED.available_amount,
+          frozen_amount = EXCLUDED.frozen_amount,
+          slashed_amount = EXCLUDED.slashed_amount,
+          updated_at = EXCLUDED.updated_at
+      `,
+      [
+        parsed.partnerId,
+        parsed.currency,
+        parsed.availableAmount,
+        parsed.frozenAmount,
+        parsed.slashedAmount,
+        parsed.updatedAt,
+      ],
+    );
+  }
+
+  async listPartnerReserveLedgerEntries(partnerId?: string) {
+    const values: unknown[] = [];
+    const whereClause = partnerId ? `WHERE partner_id = $1` : "";
+    if (partnerId) values.push(partnerId);
+    const result = await this.pool.query(
+      `
+        SELECT entry_id, partner_id, entry_type, amount, currency, balance_available_after, balance_frozen_after,
+               balance_slashed_after, source_ref, reason_type, occurred_at
+        FROM partner_reserve_ledger_entries
+        ${whereClause}
+        ORDER BY occurred_at DESC, entry_id DESC
+      `,
+      values,
+    );
+
+    return result.rows.map((row) =>
+      PartnerReserveLedgerEntrySchema.parse({
+        entryId: row.entry_id,
+        partnerId: row.partner_id,
+        entryType: row.entry_type,
+        amount: row.amount,
+        currency: row.currency,
+        balanceAvailableAfter: row.balance_available_after,
+        balanceFrozenAfter: row.balance_frozen_after,
+        balanceSlashedAfter: row.balance_slashed_after,
+        sourceRef: row.source_ref,
+        reasonType: row.reason_type,
+        occurredAt: row.occurred_at,
+      }),
+    );
+  }
+
+  async insertPartnerReserveLedgerEntry(entry: PartnerReserveLedgerEntry) {
+    const parsed = PartnerReserveLedgerEntrySchema.parse(entry);
+    await this.pool.query(
+      `
+        INSERT INTO partner_reserve_ledger_entries (
+          entry_id, partner_id, entry_type, amount, currency, balance_available_after, balance_frozen_after,
+          balance_slashed_after, source_ref, reason_type, occurred_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7,
+          $8, $9, $10, $11
+        )
+      `,
+      [
+        parsed.entryId,
+        parsed.partnerId,
+        parsed.entryType,
+        parsed.amount,
+        parsed.currency,
+        parsed.balanceAvailableAfter,
+        parsed.balanceFrozenAfter,
+        parsed.balanceSlashedAfter,
+        parsed.sourceRef,
+        parsed.reasonType,
         parsed.occurredAt,
       ],
     );
@@ -2473,6 +3338,46 @@ export class PostgresPromotionAgentRepository implements PromotionAgentRepositor
       await this.insertEvidenceAsset(asset);
     }
 
+    for (const profile of seedData.opcProfiles) {
+      await this.upsertOpcProfile(profile);
+    }
+
+    for (const evidence of seedData.revenueEvidence) {
+      await this.upsertRevenueEvidence(evidence);
+    }
+
+    for (const review of seedData.verificationReviews) {
+      await this.upsertVerificationReview(review);
+    }
+
+    for (const snapshot of seedData.monthlyHealthSnapshots) {
+      await this.upsertMonthlyHealthSnapshot(snapshot);
+    }
+
+    for (const profile of seedData.channelProfiles) {
+      await this.upsertChannelProfile(profile);
+    }
+
+    for (const extension of seedData.commercialExtensions) {
+      await this.upsertCommercialExtension(extension);
+    }
+
+    for (const onboardingCase of seedData.partnerOnboardingCases) {
+      await this.upsertPartnerOnboardingCase(onboardingCase);
+    }
+
+    for (const snapshot of seedData.capabilityVerificationSnapshots) {
+      await this.upsertCapabilityVerificationSnapshot(snapshot);
+    }
+
+    for (const account of seedData.partnerReserveAccounts) {
+      await this.upsertPartnerReserveAccount(account);
+    }
+
+    for (const entry of seedData.partnerReserveLedgerEntries) {
+      await this.insertPartnerReserveLedgerEntry(entry);
+    }
+
     for (const riskCase of seedData.riskCases) {
       await this.insertRiskCase(riskCase);
     }
@@ -2617,7 +3522,7 @@ export class PostgresPromotionAgentRepository implements PromotionAgentRepositor
         ? row.source_document_url
         : Array.isArray(offer?.actionEndpoints) && typeof offer.actionEndpoints[0] === "string"
           ? offer.actionEndpoints[0]
-          : proofBundle?.references?.[0]?.url ?? "https://example.com";
+          : proofBundle?.references?.[0]?.url ?? "https://platform.lumio.ai";
     const fallbackProof =
       proofBundle?.references?.[0]?.url ??
       (Array.isArray(offer?.actionEndpoints) && typeof offer.actionEndpoints[0] === "string" ? offer.actionEndpoints[0] : fallbackUrl);
@@ -2650,6 +3555,9 @@ export class PostgresPromotionAgentRepository implements PromotionAgentRepositor
       disclosureText: row.disclosure_text,
       policyPass: row.policy_pass,
       minTrust: row.min_trust,
+      opcProfileId: row.opc_profile_id ?? null,
+      opcReviewDecision: row.opc_review_decision ?? null,
+      scaleEligibility: row.scale_eligibility ?? "full",
       linkBundle,
       offer: row.offer,
       proofBundle: row.proof_bundle,

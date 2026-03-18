@@ -1,0 +1,16 @@
+{
+  "functions": {
+    "api/index.ts": {
+      "includeFiles": "{public/**,src/db/schema.sql}"
+    }
+  },
+  "routes": [
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(?!api(?:/|$))(.*)",
+      "dest": "/api?__pathname=/$1"
+    }
+  ]
+}

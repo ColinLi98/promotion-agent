@@ -48,11 +48,32 @@ export const CreditLedgerEntryTypeSchema = z.enum([
   "expiration",
 ]);
 
+export const PartnerReserveEntryTypeSchema = z.enum([
+  "deposit",
+  "freeze",
+  "release",
+  "slash",
+  "restore",
+]);
+
 export const CampaignStatusSchema = z.enum([
   "draft",
   "reviewing",
   "active",
   "paused",
+  "rejected",
+]);
+
+export const CampaignScaleEligibilitySchema = z.enum([
+  "full",
+  "limited",
+  "blocked",
+]);
+
+export const OpcReviewDecisionSchema = z.enum([
+  "approved",
+  "probation",
+  "manual_review",
   "rejected",
 ]);
 
@@ -454,6 +475,9 @@ export const CampaignSchema = z.object({
   disclosureText: z.string(),
   policyPass: z.boolean(),
   minTrust: z.number().min(0).max(1),
+  opcProfileId: z.string().nullable().default(null),
+  opcReviewDecision: OpcReviewDecisionSchema.nullable().default(null),
+  scaleEligibility: CampaignScaleEligibilitySchema.default("full"),
   linkBundle: LinkBundleSchema,
   offer: OfferCardSchema,
   proofBundle: ProofBundleSchema,
@@ -807,6 +831,389 @@ export const AppealCaseInputSchema = z.object({
   statement: z.string(),
 });
 
+export const OpcOperatorTypeSchema = z.enum([
+  "individual",
+  "micro_team",
+  "studio",
+  "company",
+]);
+
+export const OpcPrimaryBusinessTypeSchema = z.enum([
+  "product",
+  "service",
+  "education",
+  "mixed",
+]);
+
+export const OpcEntityVerificationStatusSchema = z.enum([
+  "pending",
+  "passed",
+  "failed",
+  "expired",
+]);
+
+export const OpcProofBundleStatusSchema = z.enum([
+  "complete",
+  "partial",
+  "insufficient",
+]);
+
+export const OpcCustomerSampleStatusSchema = z.enum([
+  "pending",
+  "passed",
+  "failed",
+]);
+
+export const OpcPageClassificationSchema = z.enum([
+  "product-led",
+  "mixed",
+  "course-led",
+  "unclear",
+]);
+
+export const RevenueReconciliationStatusSchema = z.enum([
+  "pending",
+  "partial",
+  "passed",
+  "failed",
+]);
+
+export const MonthlyHealthStatusRecommendationSchema = z.enum([
+  "keep",
+  "downgrade",
+  "manual_review",
+  "reject",
+]);
+
+export const ChannelTypeSchema = z.enum([
+  "registry",
+  "gallery",
+  "marketplace",
+  "connector",
+  "direct_config",
+  "owner_email",
+]);
+
+export const ChannelDiscoveryMethodSchema = z.enum([
+  "poll",
+  "webhook",
+  "manual_submit",
+  "import",
+]);
+
+export const ChannelOnboardingModeSchema = z.enum([
+  "self_serve",
+  "assisted",
+  "managed",
+]);
+
+export const ChannelStatusSchema = z.enum([
+  "active",
+  "observe",
+  "paused",
+  "blocked",
+]);
+
+export const PartnerOnboardingStageSchema = z.enum([
+  "lead",
+  "verified",
+  "sandbox",
+  "pilot",
+  "scaled",
+  "strategic",
+]);
+
+export const PartnerContractStatusSchema = z.enum([
+  "not_started",
+  "negotiating",
+  "signed",
+  "blocked",
+]);
+
+export const PartnerSandboxStatusSchema = z.enum([
+  "not_ready",
+  "ready",
+  "failed",
+  "passed",
+]);
+
+export const CapabilityRiskTierSchema = z.enum([
+  "low",
+  "medium",
+  "high",
+]);
+
+export const CapabilityRecommendedTierSchema = z.enum([
+  "observe",
+  "pilot",
+  "scale",
+]);
+
+export const OPCProfileSchema = z.object({
+  opcId: z.string(),
+  dataProvenance: DataProvenanceSchema,
+  legalEntityName: z.string(),
+  registrationId: z.string(),
+  operatorType: OpcOperatorTypeSchema,
+  primaryBusinessType: OpcPrimaryBusinessTypeSchema,
+  businessModelPrimary: z.string(),
+  websiteUrl: z.string().url().nullable(),
+  productPageUrl: z.string().url().nullable(),
+  coursePageUrl: z.string().url().nullable(),
+  entityVerificationStatus: OpcEntityVerificationStatusSchema,
+  onboardingChannel: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export const OPCProfileInputSchema = z.object({
+  dataProvenance: DataProvenanceSchema.optional(),
+  legalEntityName: z.string(),
+  registrationId: z.string(),
+  operatorType: OpcOperatorTypeSchema,
+  primaryBusinessType: OpcPrimaryBusinessTypeSchema,
+  businessModelPrimary: z.string(),
+  websiteUrl: z.string().url().nullable().optional(),
+  productPageUrl: z.string().url().nullable().optional(),
+  coursePageUrl: z.string().url().nullable().optional(),
+  entityVerificationStatus: OpcEntityVerificationStatusSchema,
+  onboardingChannel: z.string().nullable().optional(),
+});
+
+export const RevenueEvidenceSchema = z.object({
+  evidenceId: z.string(),
+  dataProvenance: DataProvenanceSchema,
+  opcId: z.string(),
+  periodStart: z.string().date(),
+  periodEnd: z.string().date(),
+  payoutSource: z.string(),
+  settlementAmount: z.number(),
+  bankInflowAmount: z.number().nullable(),
+  orderCount: z.number().int().nonnegative().nullable(),
+  refundAmount: z.number().nullable(),
+  chargebackAmount: z.number().nullable(),
+  variableCostEstimate: z.number().nullable(),
+  contributionProfitEstimate: z.number().nullable(),
+  reconciliationStatus: RevenueReconciliationStatusSchema,
+  sourceRef: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export const RevenueEvidenceInputSchema = z.object({
+  dataProvenance: DataProvenanceSchema.optional(),
+  opcId: z.string(),
+  periodStart: z.string().date(),
+  periodEnd: z.string().date(),
+  payoutSource: z.string(),
+  settlementAmount: z.number(),
+  bankInflowAmount: z.number().nullable().optional(),
+  orderCount: z.number().int().nonnegative().nullable().optional(),
+  refundAmount: z.number().nullable().optional(),
+  chargebackAmount: z.number().nullable().optional(),
+  variableCostEstimate: z.number().nullable().optional(),
+  contributionProfitEstimate: z.number().nullable().optional(),
+  reconciliationStatus: RevenueReconciliationStatusSchema,
+  sourceRef: z.string().nullable().optional(),
+});
+
+export const VerificationReviewSchema = z.object({
+  reviewId: z.string(),
+  dataProvenance: DataProvenanceSchema,
+  opcId: z.string(),
+  verificationScore: z.number().min(0).max(100),
+  guruRiskScore: z.number().min(0).max(100),
+  externalCustomerRevenueRatio: z.number().min(0).max(1).nullable(),
+  knowledgeRevenueRatio: z.number().min(0).max(1).nullable(),
+  proofBundleStatus: OpcProofBundleStatusSchema,
+  customerSampleStatus: OpcCustomerSampleStatusSchema.nullable(),
+  pageClassification: OpcPageClassificationSchema.nullable(),
+  decision: OpcReviewDecisionSchema,
+  reviewerOwner: z.string().nullable(),
+  validUntil: z.string().date().nullable(),
+  decisionReason: z.string().nullable(),
+  reviewedAt: z.string().datetime(),
+});
+
+export const VerificationReviewInputSchema = z.object({
+  dataProvenance: DataProvenanceSchema.optional(),
+  opcId: z.string(),
+  verificationScore: z.number().min(0).max(100),
+  guruRiskScore: z.number().min(0).max(100),
+  externalCustomerRevenueRatio: z.number().min(0).max(1).nullable().optional(),
+  knowledgeRevenueRatio: z.number().min(0).max(1).nullable().optional(),
+  proofBundleStatus: OpcProofBundleStatusSchema,
+  customerSampleStatus: OpcCustomerSampleStatusSchema.nullable().optional(),
+  pageClassification: OpcPageClassificationSchema.nullable().optional(),
+  decision: OpcReviewDecisionSchema,
+  reviewerOwner: z.string().nullable().optional(),
+  validUntil: z.string().date().nullable().optional(),
+  decisionReason: z.string().nullable().optional(),
+});
+
+export const MonthlyHealthSnapshotSchema = z.object({
+  snapshotId: z.string(),
+  dataProvenance: DataProvenanceSchema,
+  opcId: z.string(),
+  month: z.string().date(),
+  netCashIn: z.number().nullable(),
+  contributionProfitEstimate: z.number().nullable(),
+  refundRate: z.number().min(0).max(1).nullable(),
+  chargebackRate: z.number().min(0).max(1).nullable(),
+  externalCustomerRevenueRatio: z.number().min(0).max(1).nullable(),
+  knowledgeRevenueRatio: z.number().min(0).max(1).nullable(),
+  trafficConcentration: z.number().min(0).max(1).nullable(),
+  riskDelta: z.number().nullable(),
+  statusRecommendation: MonthlyHealthStatusRecommendationSchema.nullable(),
+  escalationRequired: z.boolean(),
+  createdAt: z.string().datetime(),
+});
+
+export const MonthlyHealthSnapshotInputSchema = z.object({
+  dataProvenance: DataProvenanceSchema.optional(),
+  opcId: z.string(),
+  month: z.string().date(),
+  netCashIn: z.number().nullable().optional(),
+  contributionProfitEstimate: z.number().nullable().optional(),
+  refundRate: z.number().min(0).max(1).nullable().optional(),
+  chargebackRate: z.number().min(0).max(1).nullable().optional(),
+  externalCustomerRevenueRatio: z.number().min(0).max(1).nullable().optional(),
+  knowledgeRevenueRatio: z.number().min(0).max(1).nullable().optional(),
+  trafficConcentration: z.number().min(0).max(1).nullable().optional(),
+  riskDelta: z.number().nullable().optional(),
+  statusRecommendation: MonthlyHealthStatusRecommendationSchema.nullable().optional(),
+  escalationRequired: z.boolean().default(false),
+});
+
+export const ChannelProfileSchema = z.object({
+  channelId: z.string(),
+  dataProvenance: DataProvenanceSchema,
+  channelType: ChannelTypeSchema,
+  operatorName: z.string().nullable(),
+  discoveryMethod: ChannelDiscoveryMethodSchema,
+  onboardingMode: ChannelOnboardingModeSchema,
+  expectedReachProxy: z.number().min(0).max(1).nullable(),
+  supportsReceipts: z.array(z.string()),
+  rateLimitPolicy: z.string().nullable(),
+  costModel: z.string().nullable(),
+  channelStatus: ChannelStatusSchema,
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export const ChannelProfileInputSchema = z.object({
+  dataProvenance: DataProvenanceSchema.optional(),
+  channelType: ChannelTypeSchema,
+  operatorName: z.string().nullable().optional(),
+  discoveryMethod: ChannelDiscoveryMethodSchema,
+  onboardingMode: ChannelOnboardingModeSchema,
+  expectedReachProxy: z.number().min(0).max(1).nullable().optional(),
+  supportsReceipts: z.array(z.string()).default([]),
+  rateLimitPolicy: z.string().nullable().optional(),
+  costModel: z.string().nullable().optional(),
+  channelStatus: ChannelStatusSchema,
+});
+
+export const CommercialExtensionSchema = z.object({
+  extensionId: z.string(),
+  dataProvenance: DataProvenanceSchema,
+  partnerId: z.string(),
+  extensionVersion: z.string(),
+  acceptsCommercialOpportunity: z.boolean(),
+  placementTypes: z.array(z.string()).min(1),
+  disclosureRequired: z.boolean(),
+  receiptModes: z.array(z.string()).min(1),
+  billingModes: z.array(z.string()),
+  supportedIntentDomains: z.array(z.string()),
+  maxQps: z.number().nonnegative().nullable(),
+  policyEndpoint: z.string().url().nullable(),
+  contractRequired: z.boolean(),
+  signatureScheme: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export const CommercialExtensionInputSchema = z.object({
+  dataProvenance: DataProvenanceSchema.optional(),
+  partnerId: z.string(),
+  extensionVersion: z.string(),
+  acceptsCommercialOpportunity: z.boolean(),
+  placementTypes: z.array(z.string()).min(1),
+  disclosureRequired: z.boolean(),
+  receiptModes: z.array(z.string()).min(1),
+  billingModes: z.array(z.string()).default([]),
+  supportedIntentDomains: z.array(z.string()).default([]),
+  maxQps: z.number().nonnegative().nullable().optional(),
+  policyEndpoint: z.string().url().nullable().optional(),
+  contractRequired: z.boolean().default(false),
+  signatureScheme: z.string().nullable().optional(),
+});
+
+export const PartnerOnboardingCaseSchema = z.object({
+  caseId: z.string(),
+  dataProvenance: DataProvenanceSchema,
+  agentLeadId: z.string(),
+  channelId: z.string(),
+  currentStage: PartnerOnboardingStageSchema,
+  contractStatus: PartnerContractStatusSchema.nullable(),
+  sandboxStatus: PartnerSandboxStatusSchema.nullable(),
+  pilotBudgetLimit: z.number().nonnegative().nullable(),
+  technicalOwner: z.string().nullable(),
+  businessOwner: z.string().nullable(),
+  blockerCode: z.string().nullable(),
+  nextReviewAt: z.string().datetime().nullable(),
+  launchedAt: z.string().datetime().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export const PartnerOnboardingCaseInputSchema = z.object({
+  dataProvenance: DataProvenanceSchema.optional(),
+  agentLeadId: z.string(),
+  channelId: z.string(),
+  currentStage: PartnerOnboardingStageSchema,
+  contractStatus: PartnerContractStatusSchema.nullable().optional(),
+  sandboxStatus: PartnerSandboxStatusSchema.nullable().optional(),
+  pilotBudgetLimit: z.number().nonnegative().nullable().optional(),
+  technicalOwner: z.string().nullable().optional(),
+  businessOwner: z.string().nullable().optional(),
+  blockerCode: z.string().nullable().optional(),
+  nextReviewAt: z.string().datetime().nullable().optional(),
+  launchedAt: z.string().datetime().nullable().optional(),
+});
+
+export const CapabilityVerificationSnapshotSchema = z.object({
+  snapshotId: z.string(),
+  dataProvenance: DataProvenanceSchema,
+  agentLeadId: z.string(),
+  publicCardValid: z.boolean(),
+  authTestPassed: z.boolean(),
+  opportunityTestPassed: z.boolean(),
+  receiptTestPassed: z.boolean(),
+  presentationReceiptSupported: z.boolean(),
+  meanLatencyMs: z.number().nonnegative().nullable(),
+  successRate7d: z.number().min(0).max(1).nullable(),
+  riskTier: CapabilityRiskTierSchema.nullable(),
+  lastProbeAt: z.string().datetime().nullable(),
+  recommendedTier: CapabilityRecommendedTierSchema.nullable(),
+  createdAt: z.string().datetime(),
+});
+
+export const CapabilityVerificationSnapshotInputSchema = z.object({
+  dataProvenance: DataProvenanceSchema.optional(),
+  agentLeadId: z.string(),
+  publicCardValid: z.boolean(),
+  authTestPassed: z.boolean(),
+  opportunityTestPassed: z.boolean(),
+  receiptTestPassed: z.boolean(),
+  presentationReceiptSupported: z.boolean(),
+  meanLatencyMs: z.number().nonnegative().nullable().optional(),
+  successRate7d: z.number().min(0).max(1).nullable().optional(),
+  riskTier: CapabilityRiskTierSchema.nullable().optional(),
+  lastProbeAt: z.string().datetime().nullable().optional(),
+  recommendedTier: CapabilityRecommendedTierSchema.nullable().optional(),
+});
+
 export const MeasurementFunnelQuerySchema = z.object({
   campaignId: z.string().optional(),
   partnerId: z.string().optional(),
@@ -893,6 +1300,29 @@ export const WorkspaceSubscriptionSchema = z.object({
   includedCreditsPerCycle: z.number().int().nonnegative(),
   cycleStartAt: z.string().datetime(),
   cycleEndAt: z.string().datetime(),
+});
+
+export const PartnerReserveAccountSchema = z.object({
+  partnerId: z.string(),
+  currency: z.string().length(3),
+  availableAmount: z.number().nonnegative(),
+  frozenAmount: z.number().nonnegative(),
+  slashedAmount: z.number().nonnegative(),
+  updatedAt: z.string().datetime(),
+});
+
+export const PartnerReserveLedgerEntrySchema = z.object({
+  entryId: z.string(),
+  partnerId: z.string(),
+  entryType: PartnerReserveEntryTypeSchema,
+  amount: z.number().nonnegative(),
+  currency: z.string().length(3),
+  balanceAvailableAfter: z.number().nonnegative(),
+  balanceFrozenAfter: z.number().nonnegative(),
+  balanceSlashedAfter: z.number().nonnegative(),
+  sourceRef: z.string(),
+  reasonType: z.string(),
+  occurredAt: z.string().datetime(),
 });
 
 export const PromotionRunSchema = z.object({
@@ -1005,6 +1435,7 @@ export const CampaignDraftInputSchema = z.object({
   budget: z.number().positive(),
   disclosureText: z.string().min(1),
   minTrust: z.number().min(0).max(1).default(0.65),
+  opcProfileId: z.string().nullable().optional(),
   product: ProductDraftSchema,
   linkBundle: LinkBundleSchema.optional(),
   proofReferences: z.array(ProofReferenceSchema).min(1),
@@ -1049,6 +1480,22 @@ export type Campaign = z.infer<typeof CampaignSchema>;
 export type CampaignDraftInput = z.infer<typeof CampaignDraftInputSchema>;
 export type CampaignStatus = z.infer<typeof CampaignStatusSchema>;
 export type CreditLedgerEntry = z.infer<typeof CreditLedgerEntrySchema>;
+export type OPCProfile = z.infer<typeof OPCProfileSchema>;
+export type OPCProfileInput = z.infer<typeof OPCProfileInputSchema>;
+export type RevenueEvidence = z.infer<typeof RevenueEvidenceSchema>;
+export type RevenueEvidenceInput = z.infer<typeof RevenueEvidenceInputSchema>;
+export type VerificationReview = z.infer<typeof VerificationReviewSchema>;
+export type VerificationReviewInput = z.infer<typeof VerificationReviewInputSchema>;
+export type MonthlyHealthSnapshot = z.infer<typeof MonthlyHealthSnapshotSchema>;
+export type MonthlyHealthSnapshotInput = z.infer<typeof MonthlyHealthSnapshotInputSchema>;
+export type ChannelProfile = z.infer<typeof ChannelProfileSchema>;
+export type ChannelProfileInput = z.infer<typeof ChannelProfileInputSchema>;
+export type CommercialExtension = z.infer<typeof CommercialExtensionSchema>;
+export type CommercialExtensionInput = z.infer<typeof CommercialExtensionInputSchema>;
+export type PartnerOnboardingCase = z.infer<typeof PartnerOnboardingCaseSchema>;
+export type PartnerOnboardingCaseInput = z.infer<typeof PartnerOnboardingCaseInputSchema>;
+export type CapabilityVerificationSnapshot = z.infer<typeof CapabilityVerificationSnapshotSchema>;
+export type CapabilityVerificationSnapshotInput = z.infer<typeof CapabilityVerificationSnapshotInputSchema>;
 export type DeliveryMetrics = z.infer<typeof DeliveryMetricsSchema>;
 export type DashboardSnapshot = z.infer<typeof DashboardSnapshotSchema>;
 export type DataProvenance = z.infer<typeof DataProvenanceSchema>;
@@ -1069,6 +1516,8 @@ export type PolicyCheckResult = z.infer<typeof PolicyCheckResultSchema>;
 export type ProductDraft = z.infer<typeof ProductDraftSchema>;
 export type PromotionPlan = z.infer<typeof PromotionPlanSchema>;
 export type PromotionPlanId = z.infer<typeof PromotionPlanIdSchema>;
+export type PartnerReserveAccount = z.infer<typeof PartnerReserveAccountSchema>;
+export type PartnerReserveLedgerEntry = z.infer<typeof PartnerReserveLedgerEntrySchema>;
 export type PromotionRun = z.infer<typeof PromotionRunSchema>;
 export type PromotionRunTarget = z.infer<typeof PromotionRunTargetSchema>;
 export type RecruitmentPipeline = z.infer<typeof RecruitmentPipelineSchema>;
